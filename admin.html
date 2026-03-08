@@ -120,13 +120,19 @@
     <div class="header-bar">
       <div style="font-size: 24px; font-weight: bold; color: #333; letter-spacing: 1px;">画廊</div>
       
-      <div style="display: flex; align-items: center; justify-content: center; gap: 15px;">
+      <div style="display: flex; align-items: center; justify-content: center; gap: 15px; flex-wrap: wrap;">
         <el-select v-model="selectedAlbum" size="small" style="width: 200px;" placeholder="请选择相册以浏览">
           <el-option label="-- 请选择相册 --" value="" disabled></el-option>
           <el-option label="所有相册 (全览)" value="All"></el-option>
           <el-option label="未分类" value="None"></el-option>
           <el-option v-for="album in uniqueAlbums" :key="album" :label="album" :value="album"></el-option>
         </el-select>
+
+        <el-radio-group v-model="filterType" size="small">
+          <el-radio-button label="all">全部</el-radio-button>
+          <el-radio-button label="original">原图</el-radio-button>
+          <el-radio-button label="preview">预览图</el-radio-button>
+        </el-radio-group>
       </div>
 
       <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
@@ -162,6 +168,7 @@
     el: '#app',
     data: {
       selectedAlbum: '', 
+      filterType: 'all', // 新增：保存当前的画质过滤状态
       showLogoutButton: false,
       tableData: [],
       nextCursor: null,
@@ -180,11 +187,27 @@
         if (this.selectedAlbum === '') return [];
 
         return this.tableData.filter(data => {
+          // 1. 相册分类判断
+          let matchAlbum = true;
           if (this.selectedAlbum !== 'All') {
             const itemAlbum = (data.metadata && data.metadata.ListType) ? data.metadata.ListType : 'None';
-            return itemAlbum === this.selectedAlbum;
+            matchAlbum = (itemAlbum === this.selectedAlbum);
           }
-          return true; 
+
+          // 2. 原图/预览图判断
+          let matchType = true;
+          const metaStr = data.metadata ? JSON.stringify(data.metadata) : '';
+          const isOriginal = metaStr.includes('[原图]');
+          const isPreview = metaStr.includes('[预览图]');
+          const isLegacy = !isOriginal && !isPreview; // 兼容以前上传的旧图片
+
+          if (this.filterType === 'original') {
+            matchType = isOriginal || isLegacy; // 选看原图时，默认也显示以前没打标签的旧图
+          } else if (this.filterType === 'preview') {
+            matchType = isPreview;
+          }
+
+          return matchAlbum && matchType; 
         });
       }
     },
