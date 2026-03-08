@@ -1,10 +1,7 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-
-<head>
+<!DOCTYPE html><html lang="zh-CN"><head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Telegraph-Image 画廊</title>
+  <title>Telegraph-Image 沉浸式无缝画廊</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-ui@2.15.3/lib/theme-chalk/index.css"
     integrity="sha256-ghr1zmXTODLKl1HULQd6fq1MIe7m3FJiNTOCT8sddLM=" crossorigin="anonymous">
   <style>
@@ -117,14 +114,11 @@
       margin-bottom: 20px;
     }
   </style>
-  <script src="https://js.sentry-cdn.com/219f636ac7bde5edab2c3e16885cb535.min.js" crossorigin="anonymous"></script>
-</head>
-
-<body>
+  <script src="https://js.sentry-cdn.com/219f636ac7bde5edab2c3e16885cb535.min.js" crossorigin="anonymous"></script></head><body>
   <div id="app">
     
     <div class="header-bar">
-      <div style="font-size: 24px; font-weight: bold; color: #333; letter-spacing: 1px;">沉浸式画廊</div>
+      <div style="font-size: 24px; font-weight: bold; color: #333; letter-spacing: 1px;">画廊</div>
       
       <div style="display: flex; align-items: center; justify-content: center; gap: 15px;">
         <el-select v-model="selectedAlbum" size="small" style="width: 200px;" placeholder="请选择相册以浏览">
@@ -138,6 +132,7 @@
       <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
         <a href="./admin.html"><el-button size="mini" type="success">列表管理</el-button></a>
         <a href="./admin-imgtc.html"><el-button size="mini" type="warning">网格管理</el-button></a>
+        <a href="./admin-waterfall.html"><el-button size="mini" type="primary">瀑布流</el-button></a>
         <el-button v-if="showLogoutButton" size="mini" type="info" @click="handleLogout()">退出</el-button>
       </div>
     </div>
@@ -162,13 +157,7 @@
       <span v-else style="color: #666; font-size: 14px; font-weight: bold;">已加载该相册的全部内容 ~</span>
     </div>
 
-  </div>
-</body>
-
-<script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/element-ui@2.15.3/lib/index.js" crossorigin="anonymous"></script>
-
-<script>
+  </div></body><script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js" crossorigin="anonymous"></script><script src="https://cdn.jsdelivr.net/npm/element-ui@2.15.3/lib/index.js" crossorigin="anonymous"></script><script>
   new Vue({
     el: '#app',
     data: {
@@ -241,6 +230,4 @@
           this.nextCursor = result.list_complete ? null : result.cursor;
         });
     }
-  })
-</script>
-</html>
+  })</script></html>
