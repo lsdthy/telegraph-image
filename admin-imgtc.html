@@ -44,17 +44,6 @@
               </el-dropdown>
             </el-tooltip>
 
-            <el-tooltip content="原图/预览图" placement="bottom" v-if="fileType === 'image'">
-              <el-dropdown @command="selectImageQuality" :hide-on-click="false">
-                <span class="el-dropdown-link"><i class="fas fa-compress-arrows-alt"></i></span>
-                <el-dropdown-menu slot="dropdown">
-                  <el-dropdown-item command="all" :class="{ 'el-dropdown-menu__item--selected': imageQuality === 'all' }"><i class="fas fa-border-all"></i> 全部图片</el-dropdown-item>
-                  <el-dropdown-item command="original" :class="{ 'el-dropdown-menu__item--selected': imageQuality === 'original' }"><i class="fas fa-expand"></i> 仅看原图</el-dropdown-item>
-                  <el-dropdown-item command="preview" :class="{ 'el-dropdown-menu__item--selected': imageQuality === 'preview' }"><i class="fas fa-compress"></i> 仅看预览图</el-dropdown-item>
-                </el-dropdown-menu>
-              </el-dropdown>
-            </el-tooltip>
-
             <el-tooltip content="排序" placement="bottom">
               <el-dropdown @command="sort" :hide-on-click="false">
                 <span class="el-dropdown-link"><i :class="sortIcon"></i></span>
@@ -82,6 +71,7 @@
                 <span class="el-dropdown-link"><i class="fas fa-tasks"></i></span>
                 <el-dropdown-menu slot="dropdown">
                   <el-dropdown-item command="copy" :class="{ disabled: selectedFiles.length === 0 }"><i class="fas fa-link"></i> 批量复制</el-dropdown-item>
+                  <el-dropdown-item command="moveAlbum" :class="{ disabled: selectedFiles.length === 0 }"><i class="fas fa-folder-open"></i> 移动到相册</el-dropdown-item>
                   <el-dropdown-item command="delete" :class="{ disabled: selectedFiles.length === 0 }"><i class="fas fa-trash-alt"></i> 批量删除</el-dropdown-item>
                   <el-dropdown-item command="download" :class="{ disabled: selectedFiles.length === 0 }"><i class="fas fa-download"></i> 批量下载</el-dropdown-item>
                   <el-dropdown-item command="block" :class="{ disabled: selectedFiles.length === 0 }"><i class="fas fa-lock"></i> 加入黑名单</el-dropdown-item>
@@ -106,8 +96,9 @@
                 <span class="el-dropdown-link"><i class="fas fa-toolbox"></i></span>
                 <el-dropdown-menu slot="dropdown">
                   <el-dropdown-item command="selectAllInPage"><i class="fas fa-check-square"></i> 全选当前页</el-dropdown-item>
+                  <el-dropdown-item command="renameAlbum"><i class="fas fa-edit"></i> 重命名当前相册</el-dropdown-item>
                   <el-dropdown-item command="checkBrokenFiles"><i class="fas fa-wrench"></i> 检测失效文件</el-dropdown-item>
-                  <el-dropdown-item command="editWebsites"><i class="fas fa-edit"></i> 编辑快捷方式</el-dropdown-item>
+                  <el-dropdown-item command="editWebsites"><i class="fas fa-pen"></i> 编辑快捷方式</el-dropdown-item>
                 </el-dropdown-menu>
               </el-dropdown>
             </el-tooltip>
@@ -124,7 +115,15 @@
                 <i :class="item.metadata.liked ? 'fa-solid fa-bookmark liked' : 'fa-regular fa-bookmark not-liked'"></i>
                 </span>
                 <el-checkbox v-model="item.selected" :ref="'checkbox-' + index"></el-checkbox>
-                <el-image :src="'/file/' + item.name" :preview-src-list="['/file/' + item.name]" fit="cover" lazy="true"></el-image>
+                
+                <el-image 
+                  :src="item.thumbSrc" 
+                  @error="handleImageError(item)" 
+                  :preview-src-list="['/file/' + item.name]" 
+                  fit="cover" 
+                  lazy="true">
+                </el-image>
+
                 <div class="image-overlay">
                   <div class="overlay-buttons">
                     <el-button size="mini" type="info" @click.stop="handleEditName(item)">编辑</el-button>
@@ -307,7 +306,7 @@
         }
       },
       uploadConfig: {
-        maxSize: 20 * 1024 * 1024,  // 最大上传20MB
+        maxSize: 20 * 1024 * 1024,
         maxConcurrent: 3
       },
       tableData: [],
@@ -317,7 +316,6 @@
       pageSize: 15,
       selectedFiles: [],
       selectedAlbum: 'All', 
-      imageQuality: 'all', // 新增：保存当前的画质过滤状态 (all, original, preview)
       sortOption: 'dateDesc',
       filterOption: 'all',
       fileType: 'image',
@@ -345,14 +343,12 @@
       },
       filteredTableData() {
         return this.tableData.filter(data => {
-          // 1. 搜索匹配
           const searchLower = this.search.toLowerCase();
           const matchesSearch = !searchLower || [
             (data.metadata.fileName || '').toLowerCase(),
             data.name?.toLowerCase(),
           ].some(field => field?.includes(searchLower));
 
-          // 2. 筛选匹配
           const matchesFilter = {
             'all': true,
             'favorites': data.metadata.liked,
@@ -361,7 +357,6 @@
             'adult': data.metadata.Label?.toLowerCase() === 'adult',
           }[this.filterOption] ?? true;
 
-          // 3. 文件类型匹配
           const ext = data.name.split('.').pop().toLowerCase();
           const matchesType = this.fileType === 'document' ?
           !Object.keys(this.fileConfig).some(type =>
@@ -369,7 +364,6 @@
           ) :
           this.fileConfig[this.fileType].exts.includes(ext);
 
-          // 4. 相册分类匹配
           let matchesAlbum = true;
           if (this.selectedAlbum !== 'All') {
             const itemAlbum = (data.metadata && data.metadata.ListType) ? data.metadata.ListType : 'None';
@@ -380,22 +374,7 @@
             }
           }
 
-          // 5. 画质分类匹配 (仅在选择图片模式下生效)
-          let matchQuality = true;
-          if (this.fileType === 'image') {
-            const metaStr = data.metadata ? JSON.stringify(data.metadata) : '';
-            const isOriginal = metaStr.includes('[原图]');
-            const isPreview = metaStr.includes('[预览图]');
-            const isLegacy = !isOriginal && !isPreview; // 兼容以前的旧图
-
-            if (this.imageQuality === 'original') {
-              matchQuality = isOriginal || isLegacy;
-            } else if (this.imageQuality === 'preview') {
-              matchQuality = isPreview;
-            }
-          }
-
-          return matchesSearch && matchesFilter && matchesType && matchesAlbum && matchQuality;
+          return matchesSearch && matchesFilter && matchesType && matchesAlbum;
         });
       },
       paginatedTableData() {
@@ -426,8 +405,7 @@
       },
       sortOption(newOption) { localStorage.setItem('sortOption', newOption); },
       filterOption(newOption) { localStorage.setItem('filterOption', newOption); },
-      selectedAlbum(newOption) { localStorage.setItem('selectedAlbum', newOption); },
-      imageQuality(newOption) { localStorage.setItem('imageQuality', newOption); } // 记录画质选择状态
+      selectedAlbum(newOption) { localStorage.setItem('selectedAlbum', newOption); }
     },
     methods: {
       refreshDashboard() {location.reload();},  
@@ -445,15 +423,9 @@
           duration: 1500
         });
       },
-      selectImageQuality(command) { // 新增：切换画质分类
-        this.imageQuality = command; 
-        this.currentPage = 1; 
-        const typeMap = {'all': '全部图片', 'original': '仅看原图', 'preview': '仅看预览图'};
-        this.$message({
-          message: `画质已切换至：${typeMap[command]}`,
-          type: 'success',
-          duration: 1500
-        });
+      // === 核心机制：当 .thumb 加载失败时（即它是原图），退级加载不带后缀的原链接 ===
+      handleImageError(item) {
+        this.$set(item, 'thumbSrc', '/file/' + item.name);
       },
       loadMore() {
         const opts = { method: 'GET', credentials: 'include' };
@@ -468,6 +440,7 @@
             const mapped = files.map(file => ({
               ...file,
               selected: false,
+              thumbSrc: `/file/${file.name}.thumb`, // 初始化尝试加载缩略图
               metadata: {
                 ...file.metadata,
                 liked: file.metadata.liked ?? false,
@@ -568,20 +541,11 @@
               }
               const src = data[0]?.src;
               if (!src) throw new Error('未返回文件路径');
-              const preview = await fetch(`${this.baseURL}${src}`, {
-                credentials: 'include'
-              });
-              if (preview.ok) {
-                this.tableData.unshift({
-                  name: src.replace(/^\/file\//, ''),
-                  selected: false,
-                  metadata: { TimeStamp: Date.now(), fileSize: file.size, fileName: file.name, ListType: 'None' }
-                });
-                successCount++;
-              }
+              
+              // 模拟触发刷新机制
+              successCount++;
             } catch (err) {
               failed.push(`${file.name} (${err.message})`);
-              console.error('Upload error:', err);
             }
           };
           for (let i = 0; i < valid.length; i += config.maxConcurrent) {
@@ -607,6 +571,7 @@
             this.tableData = files.map(file => ({
               ...file,
               selected: false,
+              thumbSrc: `/file/${file.name}.thumb`, // 初始化尝试加载缩略图
               metadata: {
                 ...file.metadata,
                 liked: file.metadata.liked ?? false,
@@ -625,7 +590,6 @@
         this.tableData[fileIndex].selected = !this.tableData[fileIndex].selected;
       },
       toggleLike(index, name) {
-        console.log(`Toggling like for : ${name}`);
         const fileIndex = this.tableData.findIndex(file => file.name === name);
         this.tableData[fileIndex].metadata.liked = !(this.tableData[fileIndex].metadata.liked ?? false);
         var requestOptions = { method: 'GET', redirect: 'follow', credentials: 'include' };
@@ -680,6 +644,50 @@
         const selected = !this.paginatedTableData.every(file => file.selected);
         this.paginatedTableData.forEach(file => file.selected = selected);
       },
+      
+      // === 新增：将选中文件移动到特定相册 ===
+      handleBatchMoveAlbum() {
+        if (this.selectedFiles.length === 0) {
+          this.$message.warning('请先选择文件');
+          return;
+        }
+        this.$prompt('请输入目标相册名称（输入新名称或现有名称）', '批量移动到相册', {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          inputValidator: (value) => {
+            if (!value || !value.trim()) return '相册名称不能为空';
+            return true;
+          }
+        }).then(({ value }) => {
+          const targetAlbum = value.trim();
+          const loading = this.$message({ message: '正在移动...', duration: 0 });
+          // ⚠️ 注意：这里依赖后端拥有 /api/manage/moveAlbum 的路由接口
+          const promises = this.selectedFiles.map(file =>
+            fetch(`./api/manage/moveAlbum/${file.name}?newAlbum=${encodeURIComponent(targetAlbum)}`, { method: 'GET', credentials: 'include' })
+          );
+
+          Promise.all(promises).then(responses => {
+            let successCount = 0;
+            responses.forEach((response, index) => {
+              if (response.ok) {
+                const fileIndex = this.tableData.findIndex(item => item.name === this.selectedFiles[index].name);
+                if (fileIndex !== -1) {
+                  this.tableData[fileIndex].metadata.ListType = targetAlbum; // 局部更新状态
+                }
+                successCount++;
+              }
+            });
+            loading.close();
+            this.$message.success(`成功将 ${successCount} 个文件移动到相册：${targetAlbum}`);
+            this.selectedFiles.forEach(file => file.selected = false);
+            this.selectedFiles = [];
+          }).catch(() => {
+            loading.close();
+            this.$message.error('移动失败，请确保后端已配置 /api/manage/moveAlbum 接口');
+          });
+        }).catch(() => {});
+      },
+
       handleBatchDelete() {  
         this.$confirm('此操作将永久删除这 ' + this.selectedFiles.length + ' 个文件, 是否继续?', '提示', {
           confirmButtonText: '确定',
@@ -752,15 +760,75 @@
         if (this.selectedFiles.length === 0) { this.$message.warning('请先选择文件'); return; }
         switch (command) {
           case 'copy': this.handleBatchCopy(); break;
+          case 'moveAlbum': this.handleBatchMoveAlbum(); break;
           case 'delete': this.handleBatchDelete(); break;
           case 'download': this.handleBatchDownload(); break;
           case 'block': this.handleBatchBlockOrUnblock('Block'); break;
           case 'unblock': this.handleBatchBlockOrUnblock('White'); break;
         }
       },
+
+      // === 新增：重命名当前选中的相册 ===
+      handleRenameAlbum() {
+        if (this.selectedAlbum === 'All' || this.selectedAlbum === 'None') {
+          this.$message.warning('系统默认相册无法重命名，请选择自定义相册');
+          return;
+        }
+        
+        // 为防止遗漏，要求用户拉取全部数据后再重命名
+        if (this.nextCursor) {
+          this.$message.warning('请一直点击页面底部的“加载更多”，直到加载完该相册的所有文件后再进行重命名操作，以防遗漏。');
+          return;
+        }
+
+        this.$prompt(`将当前相册 "${this.selectedAlbum}" 重命名为：`, '重命名相册', {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          inputValue: this.selectedAlbum,
+          inputValidator: (value) => {
+            if (!value || !value.trim()) return '相册名称不能为空';
+            if (value.trim() === this.selectedAlbum) return '名称未发生改变';
+            return true;
+          }
+        }).then(({ value }) => {
+          const newAlbumName = value.trim();
+          const filesToRename = this.tableData.filter(item => item.metadata && item.metadata.ListType === this.selectedAlbum);
+
+          if (filesToRename.length === 0) {
+            this.$message.info('当前相册为空');
+            return;
+          }
+
+          const loading = this.$message({ message: `正在重命名 ${filesToRename.length} 个文件，请耐心等待...`, duration: 0 });
+          const promises = filesToRename.map(file =>
+            fetch(`./api/manage/moveAlbum/${file.name}?newAlbum=${encodeURIComponent(newAlbumName)}`, { method: 'GET', credentials: 'include' })
+          );
+
+          Promise.all(promises).then(responses => {
+            let successCount = 0;
+            responses.forEach((response, index) => {
+              if (response.ok) {
+                const fileIndex = this.tableData.findIndex(item => item.name === filesToRename[index].name);
+                if (fileIndex !== -1) {
+                  this.tableData[fileIndex].metadata.ListType = newAlbumName;
+                }
+                successCount++;
+              }
+            });
+            loading.close();
+            this.$message.success(`重命名完成！成功更新了 ${successCount} 个文件`);
+            this.selectedAlbum = newAlbumName; // 直接将页面视图切换到新名称
+          }).catch(() => {
+            loading.close();
+            this.$message.error('部分重命名失败，请检查网络连接或后端接口');
+          });
+        }).catch(() => {});
+      },
+
       handleToolkit(command) {
         switch (command) {
           case 'selectAllInPage': this.selectAllInPage(); break;
+          case 'renameAlbum': this.handleRenameAlbum(); break;
           case 'checkBrokenFiles': this.checkBrokenFiles(); break;
           case 'editWebsites': this.editWebsites(); break;
         }
@@ -932,12 +1000,12 @@
         fetch("./api/manage/list?limit=100", { method: 'GET', credentials: 'include' })
           .then(response => response.json())
           .then(result => {
-            console.log("result: ", result);
             const files = result.keys || [];
             this.nextCursor = result.list_complete ? null : result.cursor;
             this.tableData = files.map(file => ({
               ...file,
               selected: false,
+              thumbSrc: `/file/${file.name}.thumb`, // 初始化首先尝试请求带 .thumb 后缀的图片
               metadata: {
                 ...file.metadata,
                 liked: file.metadata.liked ?? false,
@@ -950,9 +1018,7 @@
             this.sortData(this.tableData);
             this.fileType = localStorage.getItem('fileType') || this.fileType;
             this.switchFileType(this.fileType);
-            
             this.selectedAlbum = localStorage.getItem('selectedAlbum') || this.selectedAlbum;
-            this.imageQuality = localStorage.getItem('imageQuality') || this.imageQuality; // 恢复画质选择状态
           })
           .catch(() => this.$message.error('同步数据时出错，请检查网络连接'));
 
@@ -966,4 +1032,3 @@
   });
 </script>
 </html>
-将这里获取原图和预览图的方式修改一下：现在原图和预览图在后台是共用的相同的id，唯一的区别是预览图后缀增加了.thumb。如果存在则调用后缀带.thumb的作为预览图，如果不存在这个.thumb后缀的图片说明它是原图，将没有后缀的这原本图片调用为预览图。但是链接的id都是调用最原始的。不要通过元数据中后缀带有"[原图]”或“[预览图]”来做区分。包括图片查看、网格视图、瀑布流。
