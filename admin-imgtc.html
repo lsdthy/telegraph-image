@@ -71,9 +71,8 @@
               <el-dropdown @command="switchQuality" :hide-on-click="false">
                 <span class="el-dropdown-link"><i class="fas fa-eye"></i></span>
                 <el-dropdown-menu slot="dropdown">
-                  <el-dropdown-item command="all" :class="{ 'el-dropdown-menu__item--selected': displayQuality === 'all' }"><i class="fas fa-border-all"></i> 全部图片</el-dropdown-item>
-                  <el-dropdown-item command="preview" :class="{ 'el-dropdown-menu__item--selected': displayQuality === 'preview' }"><i class="fas fa-compress"></i> 仅看预览图</el-dropdown-item>
-                  <el-dropdown-item command="original" :class="{ 'el-dropdown-menu__item--selected': displayQuality === 'original' }"><i class="fas fa-expand"></i> 仅看原图</el-dropdown-item>
+                  <el-dropdown-item command="preview" :class="{ 'el-dropdown-menu__item--selected': displayQuality === 'preview' }"><i class="fas fa-compress"></i> 优先加载预览图</el-dropdown-item>
+                  <el-dropdown-item command="original" :class="{ 'el-dropdown-menu__item--selected': displayQuality === 'original' }"><i class="fas fa-expand"></i> 强制加载原图</el-dropdown-item>
                 </el-dropdown-menu>
               </el-dropdown>
             </el-tooltip>
@@ -151,10 +150,12 @@
                 <el-checkbox v-model="item.selected" :ref="'checkbox-' + index"></el-checkbox>
                 
                 <el-image 
-                  :src="'/file/' + item.name" 
+                  :key="displayQuality + '_' + item.name"
+                  :src="displayQuality === 'preview' ? (item.thumbFailed ? '/file/' + item.name : '/file/' + item.name + '.thumb') : '/file/' + item.name"
+                  @error="handleImageError(item)"
                   :preview-src-list="['/file/' + item.name]" 
                   fit="cover" 
-                  lazy="true">
+                  lazy>
                 </el-image>
 
                 <div class="image-overlay">
@@ -329,7 +330,7 @@
       pageSize: 15,
       selectedFiles: [],
       selectedAlbum: 'All', 
-      displayQuality: 'all', // 【恢复】画质状态: all, preview, original
+      displayQuality: 'preview', // 默认为 preview
       sortOption: 'dateDesc',
       filterOption: 'all',
       fileType: 'image',
@@ -363,6 +364,8 @@
         return Array.from(albums);
       },
       filteredTableData() {
+        // 【核心修复】：完全移除了基于 metaStr 的画质过滤逻辑
+        // 因为不论原图还是预览图，数据库中都只有唯一的一条记录。
         return this.tableData.filter(data => {
           const searchLower = this.search.toLowerCase();
           const matchesSearch = !searchLower || [
@@ -395,22 +398,8 @@
             }
           }
 
-          // 【修正】：通过 metadata.fileName 中的前缀判断
-          let matchQuality = true;
-          if (this.fileType === 'image' && this.displayQuality !== 'all') {
-            const metaStr = data.metadata && data.metadata.fileName ? data.metadata.fileName : '';
-            const isOriginal = metaStr.includes('[原图]');
-            const isPreview = metaStr.includes('[预览图]');
-            const isLegacy = !isOriginal && !isPreview; // 兼容没带标签的旧图
-
-            if (this.displayQuality === 'original') {
-              matchQuality = isOriginal || isLegacy;
-            } else if (this.displayQuality === 'preview') {
-              matchQuality = isPreview;
-            }
-          }
-
-          return matchesSearch && matchesFilter && matchesType && matchesAlbum && matchQuality;
+          // 不再判断 matchQuality，让所有图片项都能通过过滤器
+          return matchesSearch && matchesFilter && matchesType && matchesAlbum;
         });
       },
       paginatedTableData() {
@@ -457,7 +446,11 @@
       },
       switchQuality(command) { 
         this.displayQuality = command; 
-        this.currentPage = 1;
+        // 不需要在这里 currentPage = 1，因为列表数量不会变，只会触发图片重新加载
+      },
+      // 当 .thumb 加载失败时（比如原本就没有预览图的老图），退级加载原图
+      handleImageError(item) {
+        this.$set(item, 'thumbFailed', true);
       },
 
       loadMore() {
@@ -473,6 +466,7 @@
             const mapped = files.map(file => ({
               ...file,
               selected: false,
+              thumbFailed: false, // 增加一个标记，记录 .thumb 是否拉取失败
               metadata: {
                 ...file.metadata,
                 liked: file.metadata.liked ?? false,
@@ -533,7 +527,6 @@
         });
       },
 
-      // ======================= 智能链接解析导入导出 =======================
       openLinkDialog() {
         this.linkDialogVisible = true;
         this.linkDialogTab = 'import'; 
@@ -541,7 +534,6 @@
       },
       generateExportUrls() {
         const sourceList = this.selectedFiles.length > 0 ? this.selectedFiles : this.filteredTableData;
-        // 生成标准的 Markdown 格式
         this.exportUrls = sourceList.map(item => `![${item.metadata.fileName || item.name}](${this.baseURL}/file/${item.name})`).join('\n');
       },
       copyExportUrls() {
@@ -550,14 +542,9 @@
           .then(() => this.$message.success('Markdown 链接已成功复制到剪贴板！'));
       },
       async handleImportUrls() {
-        // 【智能解析】：支持混排文本，自动剥离 Markdown ![]() 语法，提取真实的 http/https 链接
         let rawText = this.importUrls;
-        // 提取格式如 ![描述](网址) 变成 网址
         rawText = rawText.replace(/!\[.*?\]\((https?:\/\/[^\)]+)\)/g, "$1");
-        // 根据空格或换行拆分出所有的链接
         const urls = rawText.split(/\s+/).map(u => u.trim()).filter(u => /^https?:\/\//i.test(u));
-        
-        // 去重
         const uniqueUrls = [...new Set(urls)];
 
         if (uniqueUrls.length === 0) return this.$message.warning('未检测到有效的图片网络链接');
@@ -627,7 +614,6 @@
             this.$message.error(`拉取失败：全部 ${failCount} 个链接转存失败（可能原链接失效或防盗链过严）`);
         }
       },
-      // ====================================================================
 
       async uploadFiles(event) {
         const files = Array.from(event.target.files || []);
@@ -690,6 +676,7 @@
             this.tableData = files.map(file => ({
               ...file,
               selected: false,
+              thumbFailed: false, // 初始化标志
               metadata: {
                 ...file.metadata,
                 liked: file.metadata.liked ?? false,
@@ -1119,6 +1106,7 @@
             this.tableData = files.map(file => ({
               ...file,
               selected: false,
+              thumbFailed: false, // 初始化失败标志位
               metadata: {
                 ...file.metadata,
                 liked: file.metadata.liked ?? false,
@@ -1132,7 +1120,7 @@
             this.fileType = localStorage.getItem('fileType') || this.fileType;
             this.switchFileType(this.fileType);
             this.selectedAlbum = localStorage.getItem('selectedAlbum') || this.selectedAlbum;
-            this.displayQuality = localStorage.getItem('displayQuality') || this.displayQuality; 
+            this.displayQuality = localStorage.getItem('displayQuality') || 'preview'; 
           })
           .catch(() => this.$message.error('同步数据时出错，请检查网络连接'));
 
