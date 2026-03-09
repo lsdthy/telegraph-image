@@ -9,7 +9,6 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/css/all.min.css">
   <script src="https://js.sentry-cdn.com/219f636ac7bde5edab2c3e16885cb535.min.js" crossorigin="anonymous"></script>
   <style>
-    /* 为新的链接工具按钮增加特殊样式 */
     .link-tool-btn {
       margin-left: 10px;
       background-color: #fdf6ec;
@@ -151,6 +150,7 @@
                 <el-checkbox v-model="item.selected" :ref="'checkbox-' + index"></el-checkbox>
                 
                 <el-image 
+                  :key="displayQuality + '_' + item.name"
                   :src="displayQuality === 'preview' ? item.thumbSrc : ('/file/' + item.name)" 
                   @error="handleImageError(item)" 
                   :preview-src-list="['/file/' + item.name]" 
@@ -187,13 +187,8 @@
                 <div class="video-content">
                   <video :src="'/file/' + item.name" controls style="width: 100%; height: 100%; object-fit: cover;"></video>
                   <div class="video-title">
-                    <el-popover
-                      trigger="click"
-                      placement="top"
-                      popper-class="custom-popover">
-                      <template #default>
-                        <p v-html="formattedFileDetails(item)"></p>
-                      </template>
+                    <el-popover trigger="click" placement="top" popper-class="custom-popover">
+                      <template #default><p v-html="formattedFileDetails(item)"></p></template>
                       <template #reference>
                         <span :style="{ color: item.metadata.ListType !== 'Block' ? '#fff' : '#aaa' }">{{ item.metadata.fileName || item.name }}</span>
                       </template>
@@ -213,18 +208,11 @@
               <el-card class="audio-card" :class="{ 'selected': item.selected }">
                 <div class="audio-content">
                   <div class="audio-header">
-                    <div class="audio-avatar">
-                      <img src="./music.svg" alt="Music">
-                    </div>
+                    <div class="audio-avatar"><img src="./music.svg" alt="Music"></div>
                     <div class="audio-info">
                       <div class="audio-title">
-                        <el-popover
-                          trigger="click"
-                          placement="top"
-                          popper-class="custom-popover">
-                          <template #default>
-                            <p v-html="formattedFileDetails(item)"></p>
-                          </template>
+                        <el-popover trigger="click" placement="top" popper-class="custom-popover">
+                          <template #default><p v-html="formattedFileDetails(item)"></p></template>
                           <template #reference>
                             <span :style="{ color: item.metadata.ListType !== 'Block' ? '#fff' : '#aaa' }">{{ item.metadata.fileName || item.name }}</span>
                           </template>
@@ -233,13 +221,7 @@
                       <div class="audio-subtitle">{{ getFileType(item.name) }}</div>
                     </div>
                   </div>
-                  <audio
-                    class="custom-audio-player"
-                    :src="'/file/' + item.name"
-                    controls
-                    preload="metadata">
-                    当前浏览器不支持音频播放
-                  </audio>
+                  <audio class="custom-audio-player" :src="'/file/' + item.name" controls preload="metadata">当前浏览器不支持音频播放</audio>
                   <div class="audio-controls">
                     <button class="control-btn like-btn" @click.stop="toggleLike(index, item.name)"><i :class="item.metadata.liked ? 'fas fa-heart liked' : 'far fa-heart'"></i></button>
                     <button class="control-btn edit-btn" @click.stop="handleEditName(item)"><i class="fas fa-edit"></i></button>
@@ -254,18 +236,11 @@
               <el-card class="file-card" :class="{ 'selected': item.selected }">
                 <div class="file-content">
                   <div class="file-header">
-                    <div class="file-avatar">
-                      <i :class="getFileIcon(item.name)" style="font-size: 32px;"></i>
-                    </div>
+                    <div class="file-avatar"><i :class="getFileIcon(item.name)" style="font-size: 32px;"></i></div>
                     <div class="file-info">
                       <div class="file-title">
-                        <el-popover
-                          trigger="click"
-                          placement="top"
-                          popper-class="custom-popover">
-                          <template #default>
-                            <p v-html="formattedFileDetails(item)"></p>
-                          </template>
+                        <el-popover trigger="click" placement="top" popper-class="custom-popover">
+                          <template #default><p v-html="formattedFileDetails(item)"></p></template>
                           <template #reference>
                             <span :style="{ color: item.metadata.ListType !== 'Block' ? '#fff' : '#aaa' }">{{ item.metadata.fileName || item.name }}</span>
                           </template>
@@ -307,7 +282,6 @@
 
     <el-dialog title="🔗 链接导入 / 导出工具" :visible.sync="linkDialogVisible" width="650px">
       <el-tabs v-model="linkDialogTab" @tab-click="if(linkDialogTab === 'export') generateExportUrls()">
-        
         <el-tab-pane label="🌐 批量导入网络链接" name="import">
           <p style="font-size:13px; color:#666; line-height:1.5; margin-bottom:10px;">
             每行输入一个外部图片的直链 URL。程序将尝试把它们下载并转存到您的图床中。<br>
@@ -319,17 +293,15 @@
              <el-button type="primary" icon="el-icon-download" @click="handleImportUrls" :loading="isImporting">开始拉取并转存</el-button>
           </div>
         </el-tab-pane>
-        
         <el-tab-pane label="📤 批量导出图床链接" name="export">
           <p style="font-size:13px; color:#666; line-height:1.5; margin-bottom:10px;">
-            以下是 <strong style="color:#409EFF;">{{ selectedFiles.length > 0 ? '当前选中的 ' + selectedFiles.length : '当前筛选列表中的 ' + filteredTableData.length }}</strong> 个文件的完整直链：
+            以下是 <strong style="color:#409EFF;">{{ selectedFiles.length > 0 ? '当前选中的 ' + selectedFiles.length : '当前筛选列表中的 ' + filteredTableData.length }}</strong> 个文件的完整直链（导出的是 Document 接口高清原图）：
           </p>
           <el-input type="textarea" :rows="10" v-model="exportUrls" readonly></el-input>
           <div style="margin-top: 15px; text-align: right;">
              <el-button type="success" icon="el-icon-document-copy" @click="copyExportUrls">一键复制全部链接</el-button>
           </div>
         </el-tab-pane>
-
       </el-tabs>
     </el-dialog>
 
@@ -362,7 +334,6 @@
       filterOption: 'all',
       fileType: 'image',
       
-      // 【新增】链接工具绑定的数据
       linkDialogVisible: false,
       linkDialogTab: 'import',
       importUrls: '',
@@ -478,6 +449,7 @@
         this.displayQuality = command; 
         this.$message.success(command === 'preview' ? '已开启：优先加载预览图 (省流)' : '已开启：强制加载原图 (高清)');
       },
+      // === 退级机制：如果 .thumb 报404错误，直接回退加载原始的 document 无后缀链接 ===
       handleImageError(item) {
         this.$set(item, 'thumbSrc', '/file/' + item.name);
       },
@@ -555,14 +527,13 @@
         });
       },
 
-      // ======================= 新增：链接导入 / 导出核心逻辑 =======================
       openLinkDialog() {
         this.linkDialogVisible = true;
-        this.linkDialogTab = 'import'; // 默认打开导入页
-        this.generateExportUrls(); // 预先生成一次导出链接备用
+        this.linkDialogTab = 'import'; 
+        this.generateExportUrls(); 
       },
       generateExportUrls() {
-        // 如果勾选了图片则导出勾选的，否则导出当前筛选列表里的全部
+        // 无论何种画质显示，导出的直链永远是不带 .thumb 的原图 (document 接口)
         const sourceList = this.selectedFiles.length > 0 ? this.selectedFiles : this.filteredTableData;
         this.exportUrls = sourceList.map(item => `${this.baseURL}/file/${item.name}`).join('\n');
       },
@@ -572,7 +543,6 @@
           .then(() => this.$message.success('导出链接已成功复制到剪贴板！'));
       },
       async handleImportUrls() {
-        // 过滤出有效的 URL
         const urls = this.importUrls.split('\n').map(u => u.trim()).filter(u => /^https?:\/\//i.test(u));
         if (urls.length === 0) return this.$message.warning('请输入有效的 http/https 链接，每行一个');
 
@@ -581,7 +551,6 @@
         let failCount = 0;
         const loading = this.$message({ message: `正在拉取 ${urls.length} 个链接，请勿刷新页面...`, duration: 0 });
 
-        // 为了携带正确的相册信息
         const targetAlbum = (this.selectedAlbum === 'All' || this.selectedAlbum === 'None') ? 'None' : this.selectedAlbum;
         const uploadEndpoint = targetAlbum !== 'None' ? `${this.baseURL}/upload?album=${encodeURIComponent(targetAlbum)}` : `${this.baseURL}/upload`;
 
@@ -589,19 +558,16 @@
             try {
                 let blob;
                 try {
-                    // 1. 优先尝试直接抓取
                     const res = await fetch(url);
                     if (!res.ok) throw new Error('Direct fetch failed');
                     blob = await res.blob();
                 } catch (e) {
-                    // 2. 如果因为跨域或防盗链失败，自动使用 CORS 代理节点中转拉取
                     const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
                     const res = await fetch(proxyUrl);
                     if (!res.ok) throw new Error('Proxy fetch failed');
                     blob = await res.blob();
                 }
 
-                // 智能推断文件名和后缀
                 let filename = url.split('/').pop().split('?')[0] || `import_${Date.now()}`;
                 if (!filename.includes('.')) {
                     const extMap = {'image/jpeg':'jpg', 'image/png':'png', 'image/gif':'gif', 'image/webp':'webp', 'video/mp4':'mp4'};
@@ -609,12 +575,10 @@
                     filename += `.${ext}`;
                 }
                 
-                // 将 Blob 转换为可以上传的 File 对象
                 const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
                 const formData = new FormData();
                 formData.append('file', file);
                 
-                // 提交给后端的 /upload 接口
                 const uploadRes = await fetch(uploadEndpoint, {
                     method: 'POST',
                     body: formData,
@@ -642,12 +606,11 @@
             this.$message.success(`成功拉取并转存 ${successCount} 个文件`);
             this.importUrls = '';
             this.linkDialogVisible = false;
-            this.refreshFileList(); // 刷新网格显示新入库的文件
+            this.refreshFileList(); 
         } else if (failCount > 0) {
             this.$message.error(`拉取失败：全部 ${failCount} 个链接转存失败（可能原链接失效或防盗链过严）`);
         }
       },
-      // =========================================================================
 
       async uploadFiles(event) {
         const files = Array.from(event.target.files || []);
@@ -665,7 +628,6 @@
           const loading = this.$message({ message: '上传中...', duration: 0 });
           let [successCount, failed] = [0, []];
 
-          // 为了携带正确的相册信息
           const targetAlbum = (this.selectedAlbum === 'All' || this.selectedAlbum === 'None') ? 'None' : this.selectedAlbum;
           const uploadEndpoint = targetAlbum !== 'None' ? `${this.baseURL}/upload?album=${encodeURIComponent(targetAlbum)}` : `${this.baseURL}/upload`;
 
@@ -1141,7 +1103,7 @@
             this.tableData = files.map(file => ({
               ...file,
               selected: false,
-              thumbSrc: `/file/${file.name}.thumb`, 
+              thumbSrc: `/file/${file.name}.thumb`, // 初始化尝试优先加载 .thumb 预览
               metadata: {
                 ...file.metadata,
                 liked: file.metadata.liked ?? false,
