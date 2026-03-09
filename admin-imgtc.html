@@ -71,8 +71,9 @@
               <el-dropdown @command="switchQuality" :hide-on-click="false">
                 <span class="el-dropdown-link"><i class="fas fa-eye"></i></span>
                 <el-dropdown-menu slot="dropdown">
-                  <el-dropdown-item command="preview" :class="{ 'el-dropdown-menu__item--selected': displayQuality === 'preview' }"><i class="fas fa-compress"></i> 加载预览图 (.thumb)</el-dropdown-item>
-                  <el-dropdown-item command="original" :class="{ 'el-dropdown-menu__item--selected': displayQuality === 'original' }"><i class="fas fa-expand"></i> 强制加载原图</el-dropdown-item>
+                  <el-dropdown-item command="all" :class="{ 'el-dropdown-menu__item--selected': displayQuality === 'all' }"><i class="fas fa-border-all"></i> 全部图片</el-dropdown-item>
+                  <el-dropdown-item command="preview" :class="{ 'el-dropdown-menu__item--selected': displayQuality === 'preview' }"><i class="fas fa-compress"></i> 仅看预览图</el-dropdown-item>
+                  <el-dropdown-item command="original" :class="{ 'el-dropdown-menu__item--selected': displayQuality === 'original' }"><i class="fas fa-expand"></i> 仅看原图</el-dropdown-item>
                 </el-dropdown-menu>
               </el-dropdown>
             </el-tooltip>
@@ -150,9 +151,7 @@
                 <el-checkbox v-model="item.selected" :ref="'checkbox-' + index"></el-checkbox>
                 
                 <el-image 
-                  :key="displayQuality + '_' + item.name"
-                  :src="displayQuality === 'preview' ? item.thumbSrc : ('/file/' + item.name)" 
-                  @error="handleImageError(item)" 
+                  :src="'/file/' + item.name" 
                   :preview-src-list="['/file/' + item.name]" 
                   fit="cover" 
                   lazy="true">
@@ -282,24 +281,25 @@
 
     <el-dialog title="🔗 链接导入 / 导出工具" :visible.sync="linkDialogVisible" width="650px">
       <el-tabs v-model="linkDialogTab" @tab-click="if(linkDialogTab === 'export') generateExportUrls()">
-        <el-tab-pane label="🌐 批量导入网络链接" name="import">
+        <el-tab-pane label="🌐 批量导入外部链接" name="import">
           <p style="font-size:13px; color:#666; line-height:1.5; margin-bottom:10px;">
-            每行输入一个外部图片的直链 URL。程序将尝试把它们下载并转存到您的图床中。<br>
-            <span style="color:#e6a23c;"><i class="fas fa-exclamation-triangle"></i> 提示：已内置智能拉取代理，可绕过部分防盗链机制。</span>
+            支持混合输入 <strong>直接链接</strong> 或 <strong>Markdown图片格式</strong> (如 <code>![图片](https://...)</code>)。<br>
+            <span style="color:#e6a23c;"><i class="fas fa-exclamation-triangle"></i> 程序会自动提取纯链接，并尝试下载转存到当前相册中。</span>
           </p>
-          <el-input type="textarea" :rows="10" v-model="importUrls" placeholder="https://example.com/pic1.jpg&#10;https://example.com/pic2.png"></el-input>
+          <el-input type="textarea" :rows="10" v-model="importUrls" placeholder="支持格式：&#10;https://example.com/pic1.jpg&#10;![说明](https://example.com/pic2.png)"></el-input>
           <div style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center;">
-             <span style="font-size:12px; color:#999;">将会转存到当前左上角选中的相册分类中</span>
-             <el-button type="primary" icon="el-icon-download" @click="handleImportUrls" :loading="isImporting">开始拉取并转存</el-button>
+             <span style="font-size:12px; color:#999;">转存至：{{ selectedAlbum === 'All' ? '默认(未分类)' : selectedAlbum }}</span>
+             <el-button type="primary" icon="el-icon-download" @click="handleImportUrls" :loading="isImporting">智能提取并转存</el-button>
           </div>
         </el-tab-pane>
+        
         <el-tab-pane label="📤 批量导出图床链接" name="export">
           <p style="font-size:13px; color:#666; line-height:1.5; margin-bottom:10px;">
-            以下是 <strong style="color:#409EFF;">{{ selectedFiles.length > 0 ? '当前选中的 ' + selectedFiles.length : '当前筛选列表中的 ' + filteredTableData.length }}</strong> 个文件的完整直链（导出的是 Document 接口高清原图）：
+            以下是 <strong style="color:#409EFF;">{{ selectedFiles.length > 0 ? '当前选中的 ' + selectedFiles.length : '当前筛选列表中的 ' + filteredTableData.length }}</strong> 个文件的完整直链（Markdown 格式）：
           </p>
           <el-input type="textarea" :rows="10" v-model="exportUrls" readonly></el-input>
           <div style="margin-top: 15px; text-align: right;">
-             <el-button type="success" icon="el-icon-document-copy" @click="copyExportUrls">一键复制全部链接</el-button>
+             <el-button type="success" icon="el-icon-document-copy" @click="copyExportUrls">一键复制全部代码</el-button>
           </div>
         </el-tab-pane>
       </el-tabs>
@@ -329,7 +329,7 @@
       pageSize: 15,
       selectedFiles: [],
       selectedAlbum: 'All', 
-      displayQuality: 'preview', 
+      displayQuality: 'all', // 【恢复】画质状态: all, preview, original
       sortOption: 'dateDesc',
       filterOption: 'all',
       fileType: 'image',
@@ -395,7 +395,22 @@
             }
           }
 
-          return matchesSearch && matchesFilter && matchesType && matchesAlbum;
+          // 【修正】：通过 metadata.fileName 中的前缀判断
+          let matchQuality = true;
+          if (this.fileType === 'image' && this.displayQuality !== 'all') {
+            const metaStr = data.metadata && data.metadata.fileName ? data.metadata.fileName : '';
+            const isOriginal = metaStr.includes('[原图]');
+            const isPreview = metaStr.includes('[预览图]');
+            const isLegacy = !isOriginal && !isPreview; // 兼容没带标签的旧图
+
+            if (this.displayQuality === 'original') {
+              matchQuality = isOriginal || isLegacy;
+            } else if (this.displayQuality === 'preview') {
+              matchQuality = isPreview;
+            }
+          }
+
+          return matchesSearch && matchesFilter && matchesType && matchesAlbum && matchQuality;
         });
       },
       paginatedTableData() {
@@ -439,20 +454,12 @@
       selectAlbum(command) { 
         this.selectedAlbum = command; 
         this.currentPage = 1; 
-        this.$message({
-          message: `已切换至 ${command === 'All' ? '全部相册' : (command === 'None' ? '未分类' : command)}`,
-          type: 'success',
-          duration: 1500
-        });
       },
       switchQuality(command) { 
         this.displayQuality = command; 
-        this.$message.success(command === 'preview' ? '已开启：优先加载预览图 (省流)' : '已开启：强制加载原图 (高清)');
+        this.currentPage = 1;
       },
-      // === 退级机制：如果 .thumb 报404错误，直接回退加载原始的 document 无后缀链接 ===
-      handleImageError(item) {
-        this.$set(item, 'thumbSrc', '/file/' + item.name);
-      },
+
       loadMore() {
         const opts = { method: 'GET', credentials: 'include' };
         const url = this.nextCursor
@@ -466,7 +473,6 @@
             const mapped = files.map(file => ({
               ...file,
               selected: false,
-              thumbSrc: `/file/${file.name}.thumb`, 
               metadata: {
                 ...file.metadata,
                 liked: file.metadata.liked ?? false,
@@ -527,34 +533,44 @@
         });
       },
 
+      // ======================= 智能链接解析导入导出 =======================
       openLinkDialog() {
         this.linkDialogVisible = true;
         this.linkDialogTab = 'import'; 
         this.generateExportUrls(); 
       },
       generateExportUrls() {
-        // 无论何种画质显示，导出的直链永远是不带 .thumb 的原图 (document 接口)
         const sourceList = this.selectedFiles.length > 0 ? this.selectedFiles : this.filteredTableData;
-        this.exportUrls = sourceList.map(item => `${this.baseURL}/file/${item.name}`).join('\n');
+        // 生成标准的 Markdown 格式
+        this.exportUrls = sourceList.map(item => `![${item.metadata.fileName || item.name}](${this.baseURL}/file/${item.name})`).join('\n');
       },
       copyExportUrls() {
         if (!this.exportUrls) return this.$message.warning('没有可导出的链接');
         (navigator.clipboard?.writeText(this.exportUrls) || this.copyToClipboardFallback(this.exportUrls))
-          .then(() => this.$message.success('导出链接已成功复制到剪贴板！'));
+          .then(() => this.$message.success('Markdown 链接已成功复制到剪贴板！'));
       },
       async handleImportUrls() {
-        const urls = this.importUrls.split('\n').map(u => u.trim()).filter(u => /^https?:\/\//i.test(u));
-        if (urls.length === 0) return this.$message.warning('请输入有效的 http/https 链接，每行一个');
+        // 【智能解析】：支持混排文本，自动剥离 Markdown ![]() 语法，提取真实的 http/https 链接
+        let rawText = this.importUrls;
+        // 提取格式如 ![描述](网址) 变成 网址
+        rawText = rawText.replace(/!\[.*?\]\((https?:\/\/[^\)]+)\)/g, "$1");
+        // 根据空格或换行拆分出所有的链接
+        const urls = rawText.split(/\s+/).map(u => u.trim()).filter(u => /^https?:\/\//i.test(u));
+        
+        // 去重
+        const uniqueUrls = [...new Set(urls)];
+
+        if (uniqueUrls.length === 0) return this.$message.warning('未检测到有效的图片网络链接');
 
         this.isImporting = true;
         let successCount = 0;
         let failCount = 0;
-        const loading = this.$message({ message: `正在拉取 ${urls.length} 个链接，请勿刷新页面...`, duration: 0 });
+        const loading = this.$message({ message: `正在拉取 ${uniqueUrls.length} 个链接，请勿刷新页面...`, duration: 0 });
 
         const targetAlbum = (this.selectedAlbum === 'All' || this.selectedAlbum === 'None') ? 'None' : this.selectedAlbum;
         const uploadEndpoint = targetAlbum !== 'None' ? `${this.baseURL}/upload?album=${encodeURIComponent(targetAlbum)}` : `${this.baseURL}/upload`;
 
-        for (let url of urls) {
+        for (let url of uniqueUrls) {
             try {
                 let blob;
                 try {
@@ -611,6 +627,7 @@
             this.$message.error(`拉取失败：全部 ${failCount} 个链接转存失败（可能原链接失效或防盗链过严）`);
         }
       },
+      // ====================================================================
 
       async uploadFiles(event) {
         const files = Array.from(event.target.files || []);
@@ -673,7 +690,6 @@
             this.tableData = files.map(file => ({
               ...file,
               selected: false,
-              thumbSrc: `/file/${file.name}.thumb`, 
               metadata: {
                 ...file.metadata,
                 liked: file.metadata.liked ?? false,
@@ -814,9 +830,9 @@
         }).catch(() => this.$message.info('已取消批量删除'));
       },
       handleBatchCopy() {  
-        const links = this.selectedFiles.map(file => `${document.location.origin}/file/${file.name}`).join('\n');
+        const links = this.selectedFiles.map(file => `![图片](${document.location.origin}/file/${file.name})`).join('\n');
         (navigator.clipboard?.writeText(links) || this.copyToClipboardFallback(links))
-          .then(() => this.$message.success('批量复制链接成功~'));
+          .then(() => this.$message.success('批量复制 Markdown 链接成功~'));
       },
       handleBatchDownload() {  
         this.$message.info(`正在下载 ${this.selectedFiles.length} 个文件`, { duration: 1000 });
@@ -1103,7 +1119,6 @@
             this.tableData = files.map(file => ({
               ...file,
               selected: false,
-              thumbSrc: `/file/${file.name}.thumb`, // 初始化尝试优先加载 .thumb 预览
               metadata: {
                 ...file.metadata,
                 liked: file.metadata.liked ?? false,
