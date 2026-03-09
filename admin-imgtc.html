@@ -8,6 +8,21 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-ui@2.15.3/lib/theme-chalk/index.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/css/all.min.css">
   <script src="https://js.sentry-cdn.com/219f636ac7bde5edab2c3e16885cb535.min.js" crossorigin="anonymous"></script>
+  <style>
+    /* 为新的链接工具按钮增加特殊样式 */
+    .link-tool-btn {
+      margin-left: 10px;
+      background-color: #fdf6ec;
+      color: #e6a23c;
+      border: 1px solid #faecd8;
+      transition: all 0.3s;
+    }
+    .link-tool-btn:hover {
+      background-color: #e6a23c;
+      color: #fff;
+    }
+    .link-tool-btn .upload-icon { color: inherit; }
+  </style>
 </head>
 <body>
   <div id="app">
@@ -16,10 +31,19 @@
         <div class="header-content">
           <span class="title" @click="refreshDashboard">Dashboard</span>
           <div class="search-card"><el-input v-model="search" size="mini" placeholder="输入关键字搜索"></el-input></div>
-          <el-tooltip content="批量上传" placement="bottom">
+          
+          <el-tooltip content="本地批量上传" placement="bottom">
             <span class="stats" @click="handleUpload"><i class="fas fa-upload upload-icon"></i><span class="stats-text">记录数: </span>{{ Number }}</span>
           </el-tooltip>
+          
+          <el-tooltip content="批量导入/导出链接" placement="bottom">
+            <span class="stats link-tool-btn" @click="openLinkDialog">
+              <i class="fas fa-link upload-icon"></i><span class="stats-text">链接工具</span>
+            </span>
+          </el-tooltip>
+
           <input type="file" ref="fileInput" style="display: none;" multiple @change="uploadFiles">
+          
           <div class="actions">
             <el-tooltip content="文件类型" placement="bottom">
               <el-dropdown @command="switchFileType" :hide-on-click="false">
@@ -40,6 +64,16 @@
                   <el-dropdown-item command="All" :class="{ 'el-dropdown-menu__item--selected': selectedAlbum === 'All' }"><i class="fas fa-layer-group"></i> 全部相册</el-dropdown-item>
                   <el-dropdown-item command="None" :class="{ 'el-dropdown-menu__item--selected': selectedAlbum === 'None' }"><i class="fas fa-folder-minus"></i> 未分类</el-dropdown-item>
                   <el-dropdown-item v-for="album in uniqueAlbums" :key="album" :command="album" :class="{ 'el-dropdown-menu__item--selected': selectedAlbum === album }"><i class="fas fa-folder"></i> {{ album }}</el-dropdown-item>
+                </el-dropdown-menu>
+              </el-dropdown>
+            </el-tooltip>
+
+            <el-tooltip content="画质切换" placement="bottom" v-if="fileType === 'image'">
+              <el-dropdown @command="switchQuality" :hide-on-click="false">
+                <span class="el-dropdown-link"><i class="fas fa-eye"></i></span>
+                <el-dropdown-menu slot="dropdown">
+                  <el-dropdown-item command="preview" :class="{ 'el-dropdown-menu__item--selected': displayQuality === 'preview' }"><i class="fas fa-compress"></i> 加载预览图 (.thumb)</el-dropdown-item>
+                  <el-dropdown-item command="original" :class="{ 'el-dropdown-menu__item--selected': displayQuality === 'original' }"><i class="fas fa-expand"></i> 强制加载原图</el-dropdown-item>
                 </el-dropdown-menu>
               </el-dropdown>
             </el-tooltip>
@@ -117,7 +151,7 @@
                 <el-checkbox v-model="item.selected" :ref="'checkbox-' + index"></el-checkbox>
                 
                 <el-image 
-                  :src="item.thumbSrc" 
+                  :src="displayQuality === 'preview' ? item.thumbSrc : ('/file/' + item.name)" 
                   @error="handleImageError(item)" 
                   :preview-src-list="['/file/' + item.name]" 
                   fit="cover" 
@@ -252,16 +286,17 @@
             </template>
           </template>
         </div>
-  <div class="pagination-container">
-    <el-pagination
-      background layout="prev, pager, next"
-      :total="filteredTableData.length" :page-size="pageSize"
-      @current-change="handlePageChange" :current-page.sync="currentPage" />
-  </div>
-  <div style="text-align:center;margin-top:16px;">
-    <el-button v-if="nextCursor" @click="loadMore">加载更多</el-button>
-  </div>
-  <el-footer class="footer">
+
+        <div class="pagination-container">
+          <el-pagination
+            background layout="prev, pager, next"
+            :total="filteredTableData.length" :page-size="pageSize"
+            @current-change="handlePageChange" :current-page.sync="currentPage" />
+        </div>
+        <div style="text-align:center;margin-top:16px;">
+          <el-button v-if="nextCursor" @click="loadMore">加载更多</el-button>
+        </div>
+        <el-footer class="footer">
           <div>Powered By</div>
           <a href="https://github.com/cf-pages/Telegraph-Image" target="_blank" rel="noopener noreferrer">
             <div><i class="fa-brands fa-github"></i> Telegraph-Image</div>
@@ -269,6 +304,35 @@
         </el-footer>
       </el-main>
     </el-container>
+
+    <el-dialog title="🔗 链接导入 / 导出工具" :visible.sync="linkDialogVisible" width="650px">
+      <el-tabs v-model="linkDialogTab" @tab-click="if(linkDialogTab === 'export') generateExportUrls()">
+        
+        <el-tab-pane label="🌐 批量导入网络链接" name="import">
+          <p style="font-size:13px; color:#666; line-height:1.5; margin-bottom:10px;">
+            每行输入一个外部图片的直链 URL。程序将尝试把它们下载并转存到您的图床中。<br>
+            <span style="color:#e6a23c;"><i class="fas fa-exclamation-triangle"></i> 提示：已内置智能拉取代理，可绕过部分防盗链机制。</span>
+          </p>
+          <el-input type="textarea" :rows="10" v-model="importUrls" placeholder="https://example.com/pic1.jpg&#10;https://example.com/pic2.png"></el-input>
+          <div style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center;">
+             <span style="font-size:12px; color:#999;">将会转存到当前左上角选中的相册分类中</span>
+             <el-button type="primary" icon="el-icon-download" @click="handleImportUrls" :loading="isImporting">开始拉取并转存</el-button>
+          </div>
+        </el-tab-pane>
+        
+        <el-tab-pane label="📤 批量导出图床链接" name="export">
+          <p style="font-size:13px; color:#666; line-height:1.5; margin-bottom:10px;">
+            以下是 <strong style="color:#409EFF;">{{ selectedFiles.length > 0 ? '当前选中的 ' + selectedFiles.length : '当前筛选列表中的 ' + filteredTableData.length }}</strong> 个文件的完整直链：
+          </p>
+          <el-input type="textarea" :rows="10" v-model="exportUrls" readonly></el-input>
+          <div style="margin-top: 15px; text-align: right;">
+             <el-button type="success" icon="el-icon-document-copy" @click="copyExportUrls">一键复制全部链接</el-button>
+          </div>
+        </el-tab-pane>
+
+      </el-tabs>
+    </el-dialog>
+
   </div>
 </body>
 <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js"></script> 
@@ -280,35 +344,12 @@
       baseURL: document.location.origin,
       Number: 0,
       fileConfig: {
-        image: {
-          name: '图片',
-          exts: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'ico'],
-          icon: 'fas fa-image',
-          count: 0
-        },
-        video: {
-          name: '视频',
-          exts: ['mp4', 'webm', 'ogg', 'avi', 'mov', 'wmv', 'flv', 'mkv'],
-          icon: 'fas fa-video',
-          count: 0
-        },
-        audio: {
-          name: '音频',
-          exts: ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma'],
-          icon: 'fas fa-music',
-          count: 0
-        },
-        document: {
-          name: '文件',
-          exts: [],
-          icon: 'fas fa-folder-open',
-          count: 0
-        }
+        image: { name: '图片', exts: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'ico'], icon: 'fas fa-image', count: 0 },
+        video: { name: '视频', exts: ['mp4', 'webm', 'ogg', 'avi', 'mov', 'wmv', 'flv', 'mkv'], icon: 'fas fa-video', count: 0 },
+        audio: { name: '音频', exts: ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma'], icon: 'fas fa-music', count: 0 },
+        document: { name: '文件', exts: [], icon: 'fas fa-folder-open', count: 0 }
       },
-      uploadConfig: {
-        maxSize: 20 * 1024 * 1024,
-        maxConcurrent: 3
-      },
+      uploadConfig: { maxSize: 20 * 1024 * 1024, maxConcurrent: 3 },
       tableData: [],
       nextCursor: null,
       search: '',
@@ -316,9 +357,18 @@
       pageSize: 15,
       selectedFiles: [],
       selectedAlbum: 'All', 
+      displayQuality: 'preview', 
       sortOption: 'dateDesc',
       filterOption: 'all',
       fileType: 'image',
+      
+      // 【新增】链接工具绑定的数据
+      linkDialogVisible: false,
+      linkDialogTab: 'import',
+      importUrls: '',
+      exportUrls: '',
+      isImporting: false,
+
       quickWebsites: [
         { name: '原版后台', url: './admin.html', icon: 'fas fa-suitcase' },
         { name: '瀑布流', url: './admin-waterfall.html', icon: 'fas fa-wind' },
@@ -405,7 +455,8 @@
       },
       sortOption(newOption) { localStorage.setItem('sortOption', newOption); },
       filterOption(newOption) { localStorage.setItem('filterOption', newOption); },
-      selectedAlbum(newOption) { localStorage.setItem('selectedAlbum', newOption); }
+      selectedAlbum(newOption) { localStorage.setItem('selectedAlbum', newOption); },
+      displayQuality(newOption) { localStorage.setItem('displayQuality', newOption); } 
     },
     methods: {
       refreshDashboard() {location.reload();},  
@@ -423,7 +474,10 @@
           duration: 1500
         });
       },
-      // === 核心机制：当 .thumb 加载失败时（即它是原图），退级加载不带后缀的原链接 ===
+      switchQuality(command) { 
+        this.displayQuality = command; 
+        this.$message.success(command === 'preview' ? '已开启：优先加载预览图 (省流)' : '已开启：强制加载原图 (高清)');
+      },
       handleImageError(item) {
         this.$set(item, 'thumbSrc', '/file/' + item.name);
       },
@@ -440,7 +494,7 @@
             const mapped = files.map(file => ({
               ...file,
               selected: false,
-              thumbSrc: `/file/${file.name}.thumb`, // 初始化尝试加载缩略图
+              thumbSrc: `/file/${file.name}.thumb`, 
               metadata: {
                 ...file.metadata,
                 liked: file.metadata.liked ?? false,
@@ -474,14 +528,7 @@
         `;
       },
       calculatePageSize() {  
-        const config = {
-          minSize: 15, 
-          cardWidth: 240,
-          ratio: 3/4, 
-          gap: 20, 
-          defaultWidth: 800,
-          defaultHeaderHeight: 60 
-        };
+        const config = { minSize: 15, cardWidth: 240, ratio: 3/4, gap: 20, defaultWidth: 800, defaultHeaderHeight: 60 };
         const content = document.querySelector('.content');
         const header = document.querySelector('.header-content');
         const width = content?.clientWidth || config.defaultWidth;
@@ -500,15 +547,108 @@
         let fileCount = {image: 0, video: 0, audio: 0, document: 0};
         this.tableData.forEach(file => {
           const ext = file.name.split('.').pop().toLowerCase();
-          const type = Object.keys(this.fileConfig).find(t =>
-            this.fileConfig[t].exts.includes(ext)
-          ) || 'document';
+          const type = Object.keys(this.fileConfig).find(t => this.fileConfig[t].exts.includes(ext)) || 'document';
           fileCount[type]++;
         });
         Object.keys(this.fileConfig).forEach(type => {
           this.fileConfig[type].count = fileCount[type] || 0;
         });
       },
+
+      // ======================= 新增：链接导入 / 导出核心逻辑 =======================
+      openLinkDialog() {
+        this.linkDialogVisible = true;
+        this.linkDialogTab = 'import'; // 默认打开导入页
+        this.generateExportUrls(); // 预先生成一次导出链接备用
+      },
+      generateExportUrls() {
+        // 如果勾选了图片则导出勾选的，否则导出当前筛选列表里的全部
+        const sourceList = this.selectedFiles.length > 0 ? this.selectedFiles : this.filteredTableData;
+        this.exportUrls = sourceList.map(item => `${this.baseURL}/file/${item.name}`).join('\n');
+      },
+      copyExportUrls() {
+        if (!this.exportUrls) return this.$message.warning('没有可导出的链接');
+        (navigator.clipboard?.writeText(this.exportUrls) || this.copyToClipboardFallback(this.exportUrls))
+          .then(() => this.$message.success('导出链接已成功复制到剪贴板！'));
+      },
+      async handleImportUrls() {
+        // 过滤出有效的 URL
+        const urls = this.importUrls.split('\n').map(u => u.trim()).filter(u => /^https?:\/\//i.test(u));
+        if (urls.length === 0) return this.$message.warning('请输入有效的 http/https 链接，每行一个');
+
+        this.isImporting = true;
+        let successCount = 0;
+        let failCount = 0;
+        const loading = this.$message({ message: `正在拉取 ${urls.length} 个链接，请勿刷新页面...`, duration: 0 });
+
+        // 为了携带正确的相册信息
+        const targetAlbum = (this.selectedAlbum === 'All' || this.selectedAlbum === 'None') ? 'None' : this.selectedAlbum;
+        const uploadEndpoint = targetAlbum !== 'None' ? `${this.baseURL}/upload?album=${encodeURIComponent(targetAlbum)}` : `${this.baseURL}/upload`;
+
+        for (let url of urls) {
+            try {
+                let blob;
+                try {
+                    // 1. 优先尝试直接抓取
+                    const res = await fetch(url);
+                    if (!res.ok) throw new Error('Direct fetch failed');
+                    blob = await res.blob();
+                } catch (e) {
+                    // 2. 如果因为跨域或防盗链失败，自动使用 CORS 代理节点中转拉取
+                    const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+                    const res = await fetch(proxyUrl);
+                    if (!res.ok) throw new Error('Proxy fetch failed');
+                    blob = await res.blob();
+                }
+
+                // 智能推断文件名和后缀
+                let filename = url.split('/').pop().split('?')[0] || `import_${Date.now()}`;
+                if (!filename.includes('.')) {
+                    const extMap = {'image/jpeg':'jpg', 'image/png':'png', 'image/gif':'gif', 'image/webp':'webp', 'video/mp4':'mp4'};
+                    const ext = extMap[blob.type] || 'png';
+                    filename += `.${ext}`;
+                }
+                
+                // 将 Blob 转换为可以上传的 File 对象
+                const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                // 提交给后端的 /upload 接口
+                const uploadRes = await fetch(uploadEndpoint, {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'include'
+                });
+
+                const data = await uploadRes.json();
+                if (!uploadRes.ok || (Array.isArray(data) && data[0]?.error)) {
+                    throw new Error('Upload to backend failed');
+                }
+
+                if(data[0]?.src) {
+                   successCount++;
+                }
+            } catch (err) {
+                console.error(`Failed to import ${url}:`, err);
+                failCount++;
+            }
+        }
+
+        loading.close();
+        this.isImporting = false;
+        
+        if (successCount > 0) {
+            this.$message.success(`成功拉取并转存 ${successCount} 个文件`);
+            this.importUrls = '';
+            this.linkDialogVisible = false;
+            this.refreshFileList(); // 刷新网格显示新入库的文件
+        } else if (failCount > 0) {
+            this.$message.error(`拉取失败：全部 ${failCount} 个链接转存失败（可能原链接失效或防盗链过严）`);
+        }
+      },
+      // =========================================================================
+
       async uploadFiles(event) {
         const files = Array.from(event.target.files || []);
         if (!files.length) return;
@@ -521,16 +661,19 @@
         if(!valid.length) { this.$message.info('没有符合条件的文件'); event.target.value = ''; return; }
 
         try {
-          await this.$confirm(`确定要上传这 ${valid.length} 个文件吗?`, '提示', {
-            type: 'warning'
-          });
+          await this.$confirm(`确定要上传这 ${valid.length} 个文件吗?`, '提示', { type: 'warning' });
           const loading = this.$message({ message: '上传中...', duration: 0 });
           let [successCount, failed] = [0, []];
+
+          // 为了携带正确的相册信息
+          const targetAlbum = (this.selectedAlbum === 'All' || this.selectedAlbum === 'None') ? 'None' : this.selectedAlbum;
+          const uploadEndpoint = targetAlbum !== 'None' ? `${this.baseURL}/upload?album=${encodeURIComponent(targetAlbum)}` : `${this.baseURL}/upload`;
+
           const upload = async file => {
             try {
               const formData = new FormData();
               formData.append('file', file);
-              const res = await fetch(`${this.baseURL}/upload`, {
+              const res = await fetch(uploadEndpoint, {
                 method: 'POST',
                 body: formData,
                 credentials: 'include'
@@ -542,27 +685,24 @@
               const src = data[0]?.src;
               if (!src) throw new Error('未返回文件路径');
               
-              // 模拟触发刷新机制
               successCount++;
             } catch (err) {
               failed.push(`${file.name} (${err.message})`);
             }
           };
           for (let i = 0; i < valid.length; i += config.maxConcurrent) {
-            await Promise.all(
-              valid.slice(i, i + config.maxConcurrent).map(upload)
-            );
+            await Promise.all(valid.slice(i, i + config.maxConcurrent).map(upload));
           }
           loading.close();
           successCount && this.$message.success(`成功上传 ${successCount} 个文件`);
           failed.length && this.$message.error(`上传失败: ${failed.join(', ')}`);
           this.refreshFileList();
-
         } catch {
           this.$message.info('已取消上传');
         }
         event.target.value = '';
       },
+
       refreshFileList() {  
         fetch("./api/manage/list?limit=100", { method: 'GET', credentials: 'include' })
           .then(response => response.json())
@@ -571,7 +711,7 @@
             this.tableData = files.map(file => ({
               ...file,
               selected: false,
-              thumbSrc: `/file/${file.name}.thumb`, // 初始化尝试加载缩略图
+              thumbSrc: `/file/${file.name}.thumb`, 
               metadata: {
                 ...file.metadata,
                 liked: file.metadata.liked ?? false,
@@ -645,7 +785,6 @@
         this.paginatedTableData.forEach(file => file.selected = selected);
       },
       
-      // === 新增：将选中文件移动到特定相册 ===
       handleBatchMoveAlbum() {
         if (this.selectedFiles.length === 0) {
           this.$message.warning('请先选择文件');
@@ -661,7 +800,6 @@
         }).then(({ value }) => {
           const targetAlbum = value.trim();
           const loading = this.$message({ message: '正在移动...', duration: 0 });
-          // ⚠️ 注意：这里依赖后端拥有 /api/manage/moveAlbum 的路由接口
           const promises = this.selectedFiles.map(file =>
             fetch(`./api/manage/moveAlbum/${file.name}?newAlbum=${encodeURIComponent(targetAlbum)}`, { method: 'GET', credentials: 'include' })
           );
@@ -672,7 +810,7 @@
               if (response.ok) {
                 const fileIndex = this.tableData.findIndex(item => item.name === this.selectedFiles[index].name);
                 if (fileIndex !== -1) {
-                  this.tableData[fileIndex].metadata.ListType = targetAlbum; // 局部更新状态
+                  this.tableData[fileIndex].metadata.ListType = targetAlbum; 
                 }
                 successCount++;
               }
@@ -768,14 +906,12 @@
         }
       },
 
-      // === 新增：重命名当前选中的相册 ===
       handleRenameAlbum() {
         if (this.selectedAlbum === 'All' || this.selectedAlbum === 'None') {
           this.$message.warning('系统默认相册无法重命名，请选择自定义相册');
           return;
         }
         
-        // 为防止遗漏，要求用户拉取全部数据后再重命名
         if (this.nextCursor) {
           this.$message.warning('请一直点击页面底部的“加载更多”，直到加载完该相册的所有文件后再进行重命名操作，以防遗漏。');
           return;
@@ -817,7 +953,7 @@
             });
             loading.close();
             this.$message.success(`重命名完成！成功更新了 ${successCount} 个文件`);
-            this.selectedAlbum = newAlbumName; // 直接将页面视图切换到新名称
+            this.selectedAlbum = newAlbumName; 
           }).catch(() => {
             loading.close();
             this.$message.error('部分重命名失败，请检查网络连接或后端接口');
@@ -1005,7 +1141,7 @@
             this.tableData = files.map(file => ({
               ...file,
               selected: false,
-              thumbSrc: `/file/${file.name}.thumb`, // 初始化首先尝试请求带 .thumb 后缀的图片
+              thumbSrc: `/file/${file.name}.thumb`, 
               metadata: {
                 ...file.metadata,
                 liked: file.metadata.liked ?? false,
@@ -1019,6 +1155,7 @@
             this.fileType = localStorage.getItem('fileType') || this.fileType;
             this.switchFileType(this.fileType);
             this.selectedAlbum = localStorage.getItem('selectedAlbum') || this.selectedAlbum;
+            this.displayQuality = localStorage.getItem('displayQuality') || this.displayQuality; 
           })
           .catch(() => this.$message.error('同步数据时出错，请检查网络连接'));
 
