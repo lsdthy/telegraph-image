@@ -72,8 +72,8 @@
                 <span class="el-dropdown-link"><i class="fas fa-eye"></i></span>
                 <el-dropdown-menu slot="dropdown">
                   <el-dropdown-item command="all" :class="{ 'el-dropdown-menu__item--selected': displayQuality === 'all' }"><i class="fas fa-border-all"></i> 全部图片</el-dropdown-item>
-                  <el-dropdown-item command="preview" :class="{ 'el-dropdown-menu__item--selected': displayQuality === 'preview' }"><i class="fas fa-compress"></i> 仅看预览图 (Photo接口)</el-dropdown-item>
-                  <el-dropdown-item command="original" :class="{ 'el-dropdown-menu__item--selected': displayQuality === 'original' }"><i class="fas fa-expand"></i> 仅看原图 (Document接口)</el-dropdown-item>
+                  <el-dropdown-item command="preview" :class="{ 'el-dropdown-menu__item--selected': displayQuality === 'preview' }"><i class="fas fa-compress"></i> 仅看预览图</el-dropdown-item>
+                  <el-dropdown-item command="original" :class="{ 'el-dropdown-menu__item--selected': displayQuality === 'original' }"><i class="fas fa-expand"></i> 仅看原图</el-dropdown-item>
                 </el-dropdown-menu>
               </el-dropdown>
             </el-tooltip>
@@ -329,7 +329,7 @@
       pageSize: 15,
       selectedFiles: [],
       selectedAlbum: 'All', 
-      displayQuality: 'all', // 【恢复默认状态】：全部加载，不再拦截隐藏任何图片
+      displayQuality: 'all', 
       sortOption: 'dateDesc',
       filterOption: 'all',
       fileType: 'image',
@@ -378,12 +378,26 @@
             'adult': data.metadata.Label?.toLowerCase() === 'adult',
           }[this.filterOption] ?? true;
 
-          const ext = data.name.split('.').pop().toLowerCase();
-          const matchesType = this.fileType === 'document' ?
-          !Object.keys(this.fileConfig).some(type =>
-            type !== 'document' && this.fileConfig[type].exts.includes(ext) 
-          ) :
-          this.fileConfig[this.fileType].exts.includes(ext);
+          // 【核心修复1】：修复 document 接口上传的原图可能没有后缀导致被识别为文件从而被隐藏的 BUG
+          // 优先尝试从 metadata.fileName 获取真实带后缀的文件名
+          let ext = '';
+          const fileNameToUse = (data.metadata && data.metadata.fileName) ? data.metadata.fileName : data.name;
+          if (fileNameToUse.includes('.')) {
+              ext = fileNameToUse.split('.').pop().toLowerCase();
+          }
+
+          let matchesType = false;
+          if (this.fileType === 'document') {
+              matchesType = !Object.keys(this.fileConfig).some(type => 
+                  type !== 'document' && this.fileConfig[type].exts.includes(ext)
+              );
+          } else {
+              matchesType = this.fileConfig[this.fileType].exts.includes(ext);
+              // 【兜底】：如果是图片分类，且文件完全没有后缀，默认将其作为图片展示（防止 Telegram document ID 被误杀）
+              if (ext === '' && this.fileType === 'image') {
+                  matchesType = true;
+              }
+          }
 
           let matchesAlbum = true;
           if (this.selectedAlbum !== 'All') {
@@ -395,17 +409,18 @@
             }
           }
 
-          // 【终极方案】：基于 Telegram 接口生成的 file_id 的底层特征来剥离
-          // Photo (预览图) 生成的 ID 总是以字母 A 开头
-          // Document (原图) 生成的 ID 会以 B 等其他字母开头
+          // 【核心修复2】：完全复原 admin.html 中原汁原味的 metadata 解析过滤逻辑
           let matchQuality = true;
           if (this.fileType === 'image' && this.displayQuality !== 'all') {
-            const isPhoto = data.name.startsWith('A'); // 识别 Photo 接口生成的图片
-            
-            if (this.displayQuality === 'preview') {
-              matchQuality = isPhoto;
-            } else if (this.displayQuality === 'original') {
-              matchQuality = !isPhoto;
+            const metaStr = data.metadata ? JSON.stringify(data.metadata) : '';
+            const isOriginal = metaStr.includes('[原图]');
+            const isPreview = metaStr.includes('[预览图]');
+            const isLegacy = !isOriginal && !isPreview;
+
+            if (this.displayQuality === 'original') {
+              matchQuality = isOriginal || isLegacy;
+            } else if (this.displayQuality === 'preview') {
+              matchQuality = isPreview;
             }
           }
 
@@ -532,7 +547,6 @@
         });
       },
 
-      // ======================= 智能链接解析导入导出 =======================
       openLinkDialog() {
         this.linkDialogVisible = true;
         this.linkDialogTab = 'import'; 
@@ -540,7 +554,6 @@
       },
       generateExportUrls() {
         const sourceList = this.selectedFiles.length > 0 ? this.selectedFiles : this.filteredTableData;
-        // 生成标准的 Markdown 格式
         this.exportUrls = sourceList.map(item => `![${item.metadata.fileName || item.name}](${this.baseURL}/file/${item.name})`).join('\n');
       },
       copyExportUrls() {
@@ -549,7 +562,6 @@
           .then(() => this.$message.success('Markdown 链接已成功复制到剪贴板！'));
       },
       async handleImportUrls() {
-        // 【智能解析】：支持混排文本，自动剥离 Markdown ![]() 语法，提取真实的 http/https 链接
         let rawText = this.importUrls;
         rawText = rawText.replace(/!\[.*?\]\((https?:\/\/[^\)]+)\)/g, "$1");
         const urls = rawText.split(/\s+/).map(u => u.trim()).filter(u => /^https?:\/\//i.test(u));
@@ -622,7 +634,6 @@
             this.$message.error(`拉取失败：全部 ${failCount} 个链接转存失败（可能原链接失效或防盗链过严）`);
         }
       },
-      // ====================================================================
 
       async uploadFiles(event) {
         const files = Array.from(event.target.files || []);
