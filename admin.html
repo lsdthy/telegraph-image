@@ -238,13 +238,14 @@ body{
 .el-image__inner{vertical-align:middle !important;display:block !important}
 .el-image__error{background:var(--bg2) !important;color:var(--muted) !important;min-height:60px}
 
-/* Hover overlay */
+/* Hover overlay — pointer-events:none so clicks reach el-image's built-in preview */
 .tov{
   position:absolute;inset:0;
   background:linear-gradient(to top,rgba(0,0,0,.82) 0%,rgba(0,0,0,.12) 46%,transparent 64%);
   opacity:0;transition:opacity .3s ease;
   display:flex;flex-direction:column;justify-content:flex-end;
   padding:12px 10px 10px;
+  pointer-events:none;
 }
 .tile:hover .tov{opacity:1}
 [data-theme="light"] .tov{background:linear-gradient(to top,rgba(8,5,0,.8) 0%,rgba(8,5,0,.1) 48%,transparent 66%)}
@@ -256,6 +257,7 @@ body{
   display:flex;align-items:center;justify-content:center;font-size:12px;
   background:rgba(255,255,255,.13);backdrop-filter:blur(8px);color:#fff;
   transition:transform .17s var(--ease-spring),background .17s;
+  pointer-events:auto; /* re-enable so copy button still works */
 }
 .tovb:hover{transform:scale(1.2)}
 .tovb.c:hover{background:var(--gold);color:#04030a}
@@ -295,7 +297,7 @@ body{
 }
 @media(max-width:999px){.nav{display:none}}
 @media(max-width:640px){.hd{padding:0 12px;gap:7px}.hcnt{display:none}.cpk{display:none}}
-@media(max-width:480px){.mosaic{column-count:2 !important}.pills{display:none}}
+@media(max-width:600px){.mosaic{column-count:1 !important}.pills{display:none}}
 @media(max-width:1400px){.mosaic[data-cols="6"]{column-count:5}}
 @media(max-width:1100px){.mosaic[data-cols="5"],.mosaic[data-cols="6"]{column-count:4}}
 @media(max-width:900px) {.mosaic[data-cols="4"],.mosaic[data-cols="5"],.mosaic[data-cols="6"]{column-count:3}}
@@ -428,6 +430,14 @@ body{
         <div class="etip">💡 图片边缘零间距排列，悬停后显示操作按钮</div>
       </div>
 
+      <!-- Folder selected (has sub-albums) -->
+      <div class="empty" v-else-if="sel && !isLeaf" style="min-height:calc(100vh - 54px)">
+        <div class="e-ring">▸</div>
+        <h2>{{ selSegs[selSegs.length-1] || sel }}</h2>
+        <p>这是一个目录，请选择下级子相册<br>以加载其中的图片</p>
+        <div class="etip">💡 点击左侧子目录项查看图片</div>
+      </div>
+
       <!-- No results -->
       <div class="empty" v-else-if="!filtered.length&&!loading" style="min-height:calc(100vh - 54px)">
         <div class="e-ring" style="font-size:24px">◫</div>
@@ -526,9 +536,14 @@ new Vue({
       const q=this.sdQ.toLowerCase();
       return this.ukeys.filter(k=>k.toLowerCase().includes(q)).sort();
     },
+    // True when selected album has no sub-albums — safe to load/display images
+    isLeaf(){
+      if(!this.sel||this.sel==='All'||this.sel==='None')return true;
+      return !this.ukeys.some(k=>k.startsWith(this.sel+'/'));
+    },
     selSegs(){if(!this.sel||this.sel==='All'||this.sel==='None')return[];return this.sel.split('/')},
     filtered(){
-      if(!this.sel)return[];
+      if(!this.sel||!this.isLeaf)return[];
       return this.data.filter(item=>{
         const k=(item.metadata&&item.metadata.ListType)||'None';
         const ma=this.sel==='All'?true:this.sel==='None'?(k==='None'||k==='Block'||k==='White'):(k===this.sel||k.startsWith(this.sel+'/'));
@@ -575,7 +590,7 @@ new Vue({
       }catch{this.$message.error('加载失败，请检查网络')}
       finally{this.loading=false;this.$nextTick(()=>this.auto())}
     },
-    auto(){if(!this.sel)return;if(this.filtered.length<15&&this.cursor&&!this.loading&&this.afc<5){this.afc++;this.loadMore(false)}},
+    auto(){if(!this.sel||!this.isLeaf)return;if(this.filtered.length<15&&this.cursor&&!this.loading&&this.afc<5){this.afc++;this.loadMore(false)}},
     chkMob(){this.isMob=window.innerWidth<1000}
   },
   mounted(){
@@ -597,4 +612,5 @@ new Vue({
 </script>
 </body>
 </html>
+
 
