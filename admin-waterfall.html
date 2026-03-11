@@ -281,13 +281,14 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:'DM Sans
 .el-image__inner{display:block !important;vertical-align:middle !important}
 .el-image__error{min-height:80px;background:var(--bg2) !important;color:var(--muted) !important}
 
-/* Card overlay */
+/* Card overlay — pointer-events:none so clicks reach el-image's built-in preview */
 .cov{
   position:absolute;inset:0;
   background:linear-gradient(to top,rgba(0,0,0,.86) 0%,rgba(0,0,0,.2) 48%,transparent 70%);
   opacity:0;transition:opacity .26s ease;
   display:flex;flex-direction:column;justify-content:flex-end;
   padding:14px 13px 12px;
+  pointer-events:none;
 }
 .wfc:hover .cov{opacity:1}
 [data-theme="light"] .cov{background:linear-gradient(to top,rgba(10,6,0,.82) 0%,rgba(10,6,0,.15) 50%,transparent 72%)}
@@ -299,6 +300,7 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:'DM Sans
   display:flex;align-items:center;justify-content:center;font-size:13px;
   background:rgba(255,255,255,.14);backdrop-filter:blur(8px);color:#fff;
   transition:transform .17s var(--ease-spring),background .17s;
+  pointer-events:auto; /* re-enable so action buttons still work */
 }
 .ovb:hover{transform:scale(1.2)}
 .ovb.c:hover{background:var(--gold);color:#05030a}
@@ -326,8 +328,8 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:'DM Sans
 @keyframes spin-slow{to{transform:rotate(360deg)}}
 
 /* Responsive waterfall */
-@media(max-width:640px){.wf[data-cols="4"],.wf[data-cols="5"]{column-count:3}}
-@media(max-width:480px){.wf{column-count:2 !important;padding:10px;column-gap:8px}.wfc{margin-bottom:8px;border-radius:8px}}
+@media(max-width:768px){.wf[data-cols="4"],.wf[data-cols="5"]{column-count:3}}
+@media(max-width:600px){.wf{column-count:1 !important;padding:10px 10px 0;column-gap:0}.wfc{margin-bottom:10px;border-radius:10px}}
 </style>
 </head>
 <body>
@@ -469,6 +471,14 @@ body{min-height:100%;background:var(--bg);color:var(--text);font-family:'DM Sans
         <div class="etip">💡 点击标题栏 ≡ 可展开 / 收起目录</div>
       </div>
 
+      <!-- Folder selected (has sub-albums) — prompt user to go deeper -->
+      <div class="empty" v-else-if="sel && !isLeaf">
+        <div class="e-ring">▸</div>
+        <h2>{{ selSegs[selSegs.length-1] || sel }}</h2>
+        <p>这是一个目录，请选择下级子相册<br>以加载其中的图片</p>
+        <div class="etip">💡 点击左侧子目录项查看图片</div>
+      </div>
+
       <!-- Empty results -->
       <div class="empty" v-else-if="!filtered.length&&!loading">
         <div class="e-ring" style="font-size:26px">◫</div>
@@ -578,9 +588,14 @@ new Vue({
       const q=this.sdQ.toLowerCase();
       return this.ukeys.filter(k=>k.toLowerCase().includes(q)).sort();
     },
+    // True when the selected album has no sub-albums (safe to load images)
+    isLeaf(){
+      if(!this.sel||this.sel==='All'||this.sel==='None')return true;
+      return !this.ukeys.some(k=>k.startsWith(this.sel+'/'));
+    },
     selSegs(){if(!this.sel||this.sel==='All'||this.sel==='None')return[];return this.sel.split('/')},
     filtered(){
-      if(!this.sel)return[];
+      if(!this.sel||!this.isLeaf)return[];
       const sq=this.q.toLowerCase();
       return this.data.filter(item=>{
         const k=(item.metadata&&item.metadata.ListType)||'None';
@@ -636,7 +651,7 @@ new Vue({
       }catch{this.$message.error('加载失败，请检查网络')}
       finally{this.loading=false;this.$nextTick(()=>this.auto())}
     },
-    auto(){if(!this.sel)return;if(this.filtered.length<15&&this.cursor&&!this.loading&&this.afc<5){this.afc++;this.loadMore(false)}},
+    auto(){if(!this.sel||!this.isLeaf)return;if(this.filtered.length<15&&this.cursor&&!this.loading&&this.afc<5){this.afc++;this.loadMore(false)}},
     chkMob(){
       const was=this.isMob;this.isMob=window.innerWidth<1000;
       if(!was&&this.isMob)this.sdOpen=false;
@@ -663,4 +678,5 @@ new Vue({
 </script>
 </body>
 </html>
+
 
