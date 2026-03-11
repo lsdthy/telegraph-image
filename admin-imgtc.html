@@ -1,1183 +1,436 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh" data-theme="light">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ImgTC | Admin</title>
-  <link rel="stylesheet" href="./admin-imgtc.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-ui@2.15.3/lib/theme-chalk/index.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/css/all.min.css">
-  <script src="https://js.sentry-cdn.com/219f636ac7bde5edab2c3e16885cb535.min.js" crossorigin="anonymous"></script>
-  <style>
-    .link-tool-btn {
-      margin-left: 10px;
-      background-color: #fdf6ec;
-      color: #e6a23c;
-      border: 1px solid #faecd8;
-      transition: all 0.3s;
-    }
-    .link-tool-btn:hover {
-      background-color: #e6a23c;
-      color: #fff;
-    }
-    .link-tool-btn .upload-icon { color: inherit; }
-  </style>
-</head>
-<body>
-  <div id="app">
-    <el-container>
-      <el-header>
-        <div class="header-content">
-          <span class="title" @click="refreshDashboard">Dashboard</span>
-          <div class="search-card"><el-input v-model="search" size="mini" placeholder="输入关键字搜索"></el-input></div>
-          
-          <el-tooltip content="本地批量上传" placement="bottom">
-            <span class="stats" @click="handleUpload"><i class="fas fa-upload upload-icon"></i><span class="stats-text">记录数: </span>{{ Number }}</span>
-          </el-tooltip>
-          
-          <el-tooltip content="批量导入/导出链接" placement="bottom">
-            <span class="stats link-tool-btn" @click="openLinkDialog">
-              <i class="fas fa-link upload-icon"></i><span class="stats-text">链接工具</span>
-            </span>
-          </el-tooltip>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ImgTC · Album Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-ui@2.15.3/lib/theme-chalk/index.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/css/all.min.css">
+<style>
+/* ══ Design Tokens ══════════════════════════════════════════════════════════ */
+:root {
+  --bg:          #faf8f5;
+  --bg2:         #f3f0ea;
+  --surface:     #ffffff;
+  --border:      #e8e2d8;
+  --border2:     #d4ccc0;
+  --text:        #2c2820;
+  --text2:       #6b6358;
+  --text3:       #9e958a;
+  --accent:      #c07d3e;
+  --accent-dim:  #d4a06a;
+  --accent-soft: #fdf0e4;
+  --accent-glow: rgba(192,125,62,0.12);
+  --danger:      #c0392b;
+  --danger-soft: #fef0ee;
+  --success:     #2d8653;
+  --success-soft:#eef7f1;
+  --info:        #2f6fa8;
+  --sidebar-w:   260px;
+  --header-h:    54px;
+  --radius:      8px;
+  --shadow:      0 1px 4px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.04);
+  --font-serif:  'Lora', 'Noto Serif SC', Georgia, serif;
+  --font-sans:   'DM Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+[data-theme="dark"] {
+  --bg:          #1a1814;
+  --bg2:         #211f1b;
+  --surface:     #252219;
+  --border:      #35312a;
+  --border2:     #443e34;
+  --text:        #ede8e0;
+  --text2:       #a89f94;
+  --text3:       #6b6358;
+  --accent:      #d4905a;
+  --accent-dim:  #c07d3e;
+  --accent-soft: #2c2018;
+  --accent-glow: rgba(212,144,90,0.14);
+  --danger:      #e05545;
+  --danger-soft: #2a1815;
+  --success:     #3ea06a;
+  --success-soft:#172a1e;
+  --info:        #5b9fd4;
+  --shadow:      0 1px 4px rgba(0,0,0,0.3), 0 4px 16px rgba(0,0,0,0.2);
+}
 
-          <input type="file" ref="fileInput" style="display: none;" multiple @change="uploadFiles">
-          
-          <div class="actions">
-            <el-tooltip content="文件类型" placement="bottom">
-              <el-dropdown @command="switchFileType" :hide-on-click="false">
-                <span class="el-dropdown-link"><i :class="fileTypeIcon"></i></span>
-                <el-dropdown-menu slot="dropdown">
-                  <el-dropdown-item command="image" :class="{ 'el-dropdown-menu__item--selected': fileType === 'image' }"><i :class="fileConfig.image.icon"></i> 图片</el-dropdown-item>
-                  <el-dropdown-item command="video" :class="{ 'el-dropdown-menu__item--selected': fileType === 'video' }"><i :class="fileConfig.video.icon"></i> 视频</el-dropdown-item>
-                  <el-dropdown-item command="audio" :class="{ 'el-dropdown-menu__item--selected': fileType === 'audio' }"><i :class="fileConfig.audio.icon"></i> 音频</el-dropdown-item>
-                  <el-dropdown-item command="document" :class="{ 'el-dropdown-menu__item--selected': fileType === 'document' }"><i :class="fileConfig.document.icon"></i> 文件</el-dropdown-item>
-                </el-dropdown-menu>
-              </el-dropdown>
-            </el-tooltip>
+/* ══ Reset & Base ════════════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { height: 100%; }
+body {
+  height: 100%; background: var(--bg); color: var(--text);
+  font-family: var(--font-sans); font-size: 14px; line-height: 1.5;
+  transition: background 0.25s, color 0.25s;
+}
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-dim); }
 
-            <el-tooltip content="相册分类" placement="bottom">
-              <el-dropdown @command="selectAlbum" :hide-on-click="false">
-                <span class="el-dropdown-link"><i class="fas fa-images"></i></span>
-                <el-dropdown-menu slot="dropdown">
-                  <el-dropdown-item command="All" :class="{ 'el-dropdown-menu__item--selected': selectedAlbum === 'All' }"><i class="fas fa-layer-group"></i> 全部相册</el-dropdown-item>
-                  <el-dropdown-item command="None" :class="{ 'el-dropdown-menu__item--selected': selectedAlbum === 'None' }"><i class="fas fa-folder-minus"></i> 未分类</el-dropdown-item>
-                  <el-dropdown-item v-for="album in uniqueAlbums" :key="album" :command="album" :class="{ 'el-dropdown-menu__item--selected': selectedAlbum === album }"><i class="fas fa-folder"></i> {{ album }}</el-dropdown-item>
-                </el-dropdown-menu>
-              </el-dropdown>
-            </el-tooltip>
+/* ══ App Shell ═══════════════════════════════════════════════════════════════ */
+#app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
-            <el-tooltip content="画质切换" placement="bottom" v-if="fileType === 'image'">
-              <el-dropdown @command="switchQuality" :hide-on-click="false">
-                <span class="el-dropdown-link"><i class="fas fa-eye"></i></span>
-                <el-dropdown-menu slot="dropdown">
-                  <el-dropdown-item command="all" :class="{ 'el-dropdown-menu__item--selected': displayQuality === 'all' }"><i class="fas fa-border-all"></i> 全部图片</el-dropdown-item>
-                  <el-dropdown-item command="preview" :class="{ 'el-dropdown-menu__item--selected': displayQuality === 'preview' }"><i class="fas fa-compress"></i> 仅看预览图 (Photo接口)</el-dropdown-item>
-                  <el-dropdown-item command="original" :class="{ 'el-dropdown-menu__item--selected': displayQuality === 'original' }"><i class="fas fa-expand"></i> 仅看原图 (Document接口)</el-dropdown-item>
-                </el-dropdown-menu>
-              </el-dropdown>
-            </el-tooltip>
+/* ── Header ── */
+.app-header {
+  height: var(--header-h); flex-shrink: 0;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 18px; gap: 12px;
+  box-shadow: var(--shadow); z-index: 100; position: relative;
+}
+.app-logo {
+  font-family: var(--font-serif); font-size: 17px; font-weight: 600;
+  color: var(--accent); white-space: nowrap; letter-spacing: 0.02em;
+  cursor: pointer; user-select: none;
+}
+.app-logo sub { font-family: var(--font-sans); font-size: 10px; color: var(--text3); font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; margin-left: 4px; vertical-align: baseline; }
 
-            <el-tooltip content="排序" placement="bottom">
-              <el-dropdown @command="sort" :hide-on-click="false">
-                <span class="el-dropdown-link"><i :class="sortIcon"></i></span>
-                <el-dropdown-menu slot="dropdown">
-                  <el-dropdown-item command="dateDesc" :class="{ 'el-dropdown-menu__item--selected': sortOption === 'dateDesc' }"><i class="fas fa-sort-amount-down"></i> 按时间倒序</el-dropdown-item>
-                  <el-dropdown-item command="nameAsc" :class="{ 'el-dropdown-menu__item--selected': sortOption === 'nameAsc' }"><i class="fas fa-sort-alpha-up"></i> 按名称升序</el-dropdown-item>
-                  <el-dropdown-item command="sizeDesc" :class="{ 'el-dropdown-menu__item--selected': sortOption === 'sizeDesc' }"><i class="fas fa-sort-amount-down"></i> 按大小倒序</el-dropdown-item>
-                </el-dropdown-menu>
-              </el-dropdown>
-            </el-tooltip>
-            <el-tooltip content="筛选" placement="bottom">
-              <el-dropdown @command="filter" :hide-on-click="false">
-                <span class="el-dropdown-link"><i :class="filterIcon"></i></span>
-                <el-dropdown-menu slot="dropdown">
-                  <el-dropdown-item command="all" :class="{ 'el-dropdown-menu__item--selected': filterOption === 'all' }"><i class="fas fa-filter"></i> 全部</el-dropdown-item>
-                  <el-dropdown-item command="favorites" :class="{ 'el-dropdown-menu__item--selected': filterOption === 'favorites' }"><i class="fas fa-bookmark"></i> 收藏</el-dropdown-item>
-                  <el-dropdown-item command="blocked" :class="{ 'el-dropdown-menu__item--selected': filterOption === 'blocked' }"><i class="fas fa-lock"></i> 黑名单</el-dropdown-item>
-                  <el-dropdown-item command="unblocked" :class="{ 'el-dropdown-menu__item--selected': filterOption === 'unblocked' }"><i class="fas fa-unlock"></i> 白名单</el-dropdown-item>
-                  <el-dropdown-item command="adult" :class="{ 'el-dropdown-menu__item--selected': filterOption === 'adult' }"><i class="fas fa-user-secret"></i> NSFW</el-dropdown-item>
-                </el-dropdown-menu>
-              </el-dropdown>
-            </el-tooltip>
-            <el-tooltip content="批量操作" placement="bottom">
-              <el-dropdown @command="handleBatchOperation" :hide-on-click="false">
-                <span class="el-dropdown-link"><i class="fas fa-tasks"></i></span>
-                <el-dropdown-menu slot="dropdown">
-                  <el-dropdown-item command="copy" :class="{ disabled: selectedFiles.length === 0 }"><i class="fas fa-link"></i> 批量复制</el-dropdown-item>
-                  <el-dropdown-item command="moveAlbum" :class="{ disabled: selectedFiles.length === 0 }"><i class="fas fa-folder-open"></i> 移动到相册</el-dropdown-item>
-                  <el-dropdown-item command="delete" :class="{ disabled: selectedFiles.length === 0 }"><i class="fas fa-trash-alt"></i> 批量删除</el-dropdown-item>
-                  <el-dropdown-item command="download" :class="{ disabled: selectedFiles.length === 0 }"><i class="fas fa-download"></i> 批量下载</el-dropdown-item>
-                  <el-dropdown-item command="block" :class="{ disabled: selectedFiles.length === 0 }"><i class="fas fa-lock"></i> 加入黑名单</el-dropdown-item>
-                  <el-dropdown-item command="unblock" :class="{ disabled: selectedFiles.length === 0 }"><i class="fas fa-unlock"></i> 加入白名单</el-dropdown-item>
-                </el-dropdown-menu>
-              </el-dropdown>
-            </el-tooltip>
-            <el-tooltip content="快捷方式" placement="bottom">
-              <el-dropdown @command="handleWebsite">
-                <span class="el-dropdown-link"><i class="fas fa-link"></i></span>
-                <el-dropdown-menu slot="dropdown">
-                  <template v-for="site in quickWebsites">
-                    <el-dropdown-item :command="site.url">
-                      <i :class="site.icon"></i> {{ site.name }}
-                    </el-dropdown-item>
-                  </template>
-                </el-dropdown-menu>
-              </el-dropdown>
-            </el-tooltip>
-            <el-tooltip content="工具箱" placement="bottom">
-              <el-dropdown @command="handleToolkit" :hide-on-click="false">
-                <span class="el-dropdown-link"><i class="fas fa-toolbox"></i></span>
-                <el-dropdown-menu slot="dropdown">
-                  <el-dropdown-item command="selectAllInPage"><i class="fas fa-check-square"></i> 全选当前页</el-dropdown-item>
-                  <el-dropdown-item command="renameAlbum"><i class="fas fa-edit"></i> 重命名当前相册</el-dropdown-item>
-                  <el-dropdown-item command="checkBrokenFiles"><i class="fas fa-wrench"></i> 检测失效文件</el-dropdown-item>
-                  <el-dropdown-item command="editWebsites"><i class="fas fa-pen"></i> 编辑快捷方式</el-dropdown-item>
-                </el-dropdown-menu>
-              </el-dropdown>
-            </el-tooltip>
-            <el-tooltip content="退出登录" placement="bottom"><i class="fas fa-home" @click="handleLogout"></i></el-tooltip>
-          </div>
-        </div>
-      </el-header>
-      <el-main class="main-container">
-        <div class="content">
-          <template v-for="(item, index) in paginatedTableData" :key="index">
-            <template v-if="fileType === 'image'">
-              <el-card class="image-card">
-                <span class="collect-icon" @click.stop="toggleLike(index, item.name)">
-                <i :class="item.metadata.liked ? 'fa-solid fa-bookmark liked' : 'fa-regular fa-bookmark not-liked'"></i>
-                </span>
-                <el-checkbox v-model="item.selected" :ref="'checkbox-' + index"></el-checkbox>
-                
-                <el-image 
-                  :src="'/file/' + item.name" 
-                  :preview-src-list="['/file/' + item.name]" 
-                  fit="cover" 
-                  lazy="true">
-                </el-image>
+.header-sep { width: 1px; height: 22px; background: var(--border); flex-shrink: 0; }
 
-                <div class="image-overlay">
-                  <div class="overlay-buttons">
-                    <el-button size="mini" type="info" @click.stop="handleEditName(item)">编辑</el-button>
-                    <el-button size="mini" type="primary" @click.stop="handleCopy(index, item.name)">复制</el-button>
-                    <el-button size="mini" type="danger" @click.stop="handleDelete(index, item.name)">删除</el-button>
-                  </div>
-              </div>
-              <div class="card-footer">
-                <el-popover
-                  trigger="click"
-                  placement="top"
-                  popper-class="custom-popover">
-                  <template #default>
-                    <p v-html="formattedFileDetails(item)"></p>
-                  </template>
-                  <template #reference>
-                    <span :style="{ color: item.metadata.ListType !== 'Block' ? '#fff' : '#aaa' }">
-                      {{ item.metadata.fileName || item.name }}
-                    </span>
-                  </template>
-                </el-popover>
-              </div>
-              </el-card>
-            </template>
-            <template v-else-if="fileType === 'video'">
-              <el-card class="video-card" :class="{ 'selected': item.selected }">
-                <div class="video-content">
-                  <video :src="'/file/' + item.name" controls style="width: 100%; height: 100%; object-fit: cover;"></video>
-                  <div class="video-title">
-                    <el-popover trigger="click" placement="top" popper-class="custom-popover">
-                      <template #default><p v-html="formattedFileDetails(item)"></p></template>
-                      <template #reference>
-                        <span :style="{ color: item.metadata.ListType !== 'Block' ? '#fff' : '#aaa' }">{{ item.metadata.fileName || item.name }}</span>
-                      </template>
-                    </el-popover>
-                  </div>
-                    <div class="video-controls">
-                    <button class="control-btn like-btn" @click.stop="toggleLike(index, item.name)"><i :class="item.metadata.liked ? 'fas fa-heart liked' : 'far fa-heart'"></i></button>
-                    <button class="control-btn edit-btn" @click.stop="handleEditName(item)"><i class="fas fa-edit"></i></button>
-                    <button class="control-btn select-btn" @click.stop="toggleSelect(index, item.name)"><i :class="item.selected ? 'fas fa-square-check selected' : 'far fa-square'"></i></button>
-                    <button class="control-btn" @click.stop="handleCopy(index, item.name)"><i class="fas fa-link"></i></button>
-                    <button class="control-btn" @click.stop="handleDelete(index, item.name)"><i class="fas fa-trash-alt"></i></button>
-                  </div>
-                </div>
-              </el-card>
-            </template>
-            <template v-else-if="fileType === 'audio'">
-              <el-card class="audio-card" :class="{ 'selected': item.selected }">
-                <div class="audio-content">
-                  <div class="audio-header">
-                    <div class="audio-avatar"><img src="./music.svg" alt="Music"></div>
-                    <div class="audio-info">
-                      <div class="audio-title">
-                        <el-popover trigger="click" placement="top" popper-class="custom-popover">
-                          <template #default><p v-html="formattedFileDetails(item)"></p></template>
-                          <template #reference>
-                            <span :style="{ color: item.metadata.ListType !== 'Block' ? '#fff' : '#aaa' }">{{ item.metadata.fileName || item.name }}</span>
-                          </template>
-                        </el-popover>
-                      </div>
-                      <div class="audio-subtitle">{{ getFileType(item.name) }}</div>
-                    </div>
-                  </div>
-                  <audio class="custom-audio-player" :src="'/file/' + item.name" controls preload="metadata">当前浏览器不支持音频播放</audio>
-                  <div class="audio-controls">
-                    <button class="control-btn like-btn" @click.stop="toggleLike(index, item.name)"><i :class="item.metadata.liked ? 'fas fa-heart liked' : 'far fa-heart'"></i></button>
-                    <button class="control-btn edit-btn" @click.stop="handleEditName(item)"><i class="fas fa-edit"></i></button>
-                    <button class="control-btn select-btn" @click.stop="toggleSelect(index, item.name)"><i :class="item.selected ? 'fas fa-square-check selected' : 'far fa-square'"></i></button>
-                    <button class="control-btn" @click.stop="handleCopy(index, item.name)"><i class="fas fa-copy"></i></button>
-                    <button class="control-btn" @click.stop="handleDelete(index, item.name)"><i class="fas fa-trash-alt"></i></button>
-                  </div>
-                </div>
-              </el-card>
-            </template>
-            <template v-else>
-              <el-card class="file-card" :class="{ 'selected': item.selected }">
-                <div class="file-content">
-                  <div class="file-header">
-                    <div class="file-avatar"><i :class="getFileIcon(item.name)" style="font-size: 32px;"></i></div>
-                    <div class="file-info">
-                      <div class="file-title">
-                        <el-popover trigger="click" placement="top" popper-class="custom-popover">
-                          <template #default><p v-html="formattedFileDetails(item)"></p></template>
-                          <template #reference>
-                            <span :style="{ color: item.metadata.ListType !== 'Block' ? '#fff' : '#aaa' }">{{ item.metadata.fileName || item.name }}</span>
-                          </template>
-                        </el-popover>
-                      </div>
-                      <div class="file-subtitle">{{ getFileType(item.name) }}</div>
-                    </div>
-                  </div>
-                  <div class="file-controls">
-                    <button class="control-btn like-btn" @click.stop="toggleLike(index, item.name)"><i :class="item.metadata.liked ? 'fas fa-heart liked' : 'far fa-heart'"></i></button>
-                    <button class="control-btn edit-btn" @click.stop="handleEditName(item)"><i class="fas fa-edit"></i></button>
-                    <button class="control-btn select-btn" @click.stop="toggleSelect(index, item.name)"><i :class="item.selected ? 'fas fa-square-check selected' : 'far fa-square'"></i></button>
-                    <button class="control-btn" @click.stop="handleCopy(index, item.name)"><i class="fas fa-copy"></i></button>
-                    <button class="control-btn" @click.stop="handleDelete(index, item.name)"><i class="fas fa-trash-alt"></i></button>
-                  </div>
-                </div>
-              </el-card>
-            </template>
-          </template>
-        </div>
+.header-search { position: relative; }
+.header-search input {
+  width: 220px; height: 32px; padding: 0 12px 0 34px;
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 99px; color: var(--text); font-family: var(--font-sans); font-size: 13px;
+  transition: width 0.25s, border-color 0.2s, background 0.2s;
+  outline: none;
+}
+.header-search input::placeholder { color: var(--text3); }
+.header-search input:focus { width: 280px; border-color: var(--accent); background: var(--surface); }
+.header-search .search-ico { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--text3); font-size: 12px; pointer-events: none; }
 
-        <div class="pagination-container">
-          <el-pagination
-            background layout="prev, pager, next"
-            :total="filteredTableData.length" :page-size="pageSize"
-            @current-change="handlePageChange" :current-page.sync="currentPage" />
-        </div>
-        
-        <div style="text-align:center; margin-top:16px; margin-bottom:30px;">
-          <el-button v-if="nextCursor" @click="loadMore(false)" type="primary" round shadow :loading="isLoading">
-            {{ isLoading ? '正在云端极速打捞匹配数据...' : '加载更多' }}
-          </el-button>
-          <span v-else style="color: #666; font-size: 14px; font-weight: bold;">
-            <i class="el-icon-circle-check" style="color: #67C23A; margin-right: 5px;"></i>已加载该筛选条件下的全部内容
-          </span>
-        </div>
-        
-        <el-footer class="footer">
-          <div>Powered By</div>
-          <a href="https://github.com/cf-pages/Telegraph-Image" target="_blank" rel="noopener noreferrer">
-            <div><i class="fa-brands fa-github"></i> Telegraph-Image</div>
-          </a>
-        </el-footer>
-      </el-main>
-    </el-container>
+.header-stat {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--accent-soft); border: 1px solid var(--border);
+  padding: 4px 12px; border-radius: 99px; font-size: 12px; color: var(--accent);
+  cursor: pointer; transition: all 0.2s; white-space: nowrap;
+}
+.header-stat:hover { background: var(--accent-glow); border-color: var(--accent-dim); }
 
-    <el-dialog title="🔗 链接导入 / 导出工具" :visible.sync="linkDialogVisible" width="650px">
-      <el-tabs v-model="linkDialogTab" @tab-click="if(linkDialogTab === 'export') generateExportUrls()">
-        <el-tab-pane label="🌐 批量导入外部链接" name="import">
-          <p style="font-size:13px; color:#666; line-height:1.5; margin-bottom:10px;">
-            支持混合输入 <strong>直接链接</strong> 或 <strong>Markdown图片格式</strong> (如 <code>![图片](https://...)</code>)。<br>
-            <span style="color:#e6a23c;"><i class="fas fa-exclamation-triangle"></i> 程序会自动提取纯链接，并尝试下载转存到当前相册中。</span>
-          </p>
-          <el-input type="textarea" :rows="10" v-model="importUrls" placeholder="支持格式：&#10;https://example.com/pic1.jpg&#10;![说明](https://example.com/pic2.png)"></el-input>
-          <div style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center;">
-             <span style="font-size:12px; color:#999;">转存至：{{ selectedAlbum === 'All' ? '默认(未分类)' : selectedAlbum }}</span>
-             <el-button type="primary" icon="el-icon-download" @click="handleImportUrls" :loading="isImporting">智能提取并转存</el-button>
-          </div>
-        </el-tab-pane>
-        
-        <el-tab-pane label="📤 批量导出图床链接" name="export">
-          <p style="font-size:13px; color:#666; line-height:1.5; margin-bottom:10px;">
-            以下是 <strong style="color:#409EFF;">{{ selectedFiles.length > 0 ? '当前选中的 ' + selectedFiles.length : '当前筛选列表中的 ' + filteredTableData.length }}</strong> 个文件的完整直链（Markdown 格式）：
-          </p>
-          <el-input type="textarea" :rows="10" v-model="exportUrls" readonly></el-input>
-          <div style="margin-top: 15px; text-align: right;">
-             <el-button type="success" icon="el-icon-document-copy" @click="copyExportUrls">一键复制全部代码</el-button>
-          </div>
-        </el-tab-pane>
-      </el-tabs>
-    </el-dialog>
+.header-actions { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.hbtn {
+  width: 34px; height: 34px; border-radius: var(--radius); border: none;
+  background: transparent; color: var(--text2); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; transition: all 0.18s;
+}
+.hbtn:hover { background: var(--bg2); color: var(--accent); }
+.hbtn.active { color: var(--accent); background: var(--accent-soft); }
 
-  </div>
-</body>
-<script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js"></script> 
-<script src="https://cdn.jsdelivr.net/npm/element-ui@2.15.3/lib/index.js"></script> 
-<script>
-  new Vue({
-    el: '#app',
-    data: {
-      baseURL: document.location.origin,
-      Number: 0,
-      fileConfig: {
-        image: { name: '图片', exts: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'ico'], icon: 'fas fa-image', count: 0 },
-        video: { name: '视频', exts: ['mp4', 'webm', 'ogg', 'avi', 'mov', 'wmv', 'flv', 'mkv'], icon: 'fas fa-video', count: 0 },
-        audio: { name: '音频', exts: ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma'], icon: 'fas fa-music', count: 0 },
-        document: { name: '文件', exts: [], icon: 'fas fa-folder-open', count: 0 }
-      },
-      uploadConfig: { maxSize: 20 * 1024 * 1024, maxConcurrent: 3 },
-      tableData: [],
-      nextCursor: null,
-      search: '',
-      currentPage: 1,
-      pageSize: 15,
-      selectedFiles: [],
-      selectedAlbum: 'All', 
-      displayQuality: 'all', 
-      sortOption: 'dateDesc',
-      filterOption: 'all',
-      fileType: 'image',
-      
-      // 【新增】：性能优化变量
-      isLoading: false,
-      autoFetchCount: 0,
-      
-      linkDialogVisible: false,
-      linkDialogTab: 'import',
-      importUrls: '',
-      exportUrls: '',
-      isImporting: false,
+/* ── Body Layout ── */
+.app-body { display: flex; flex: 1; overflow: hidden; }
 
-      quickWebsites: [
-        { name: '原版后台', url: './admin.html', icon: 'fas fa-suitcase' },
-        { name: '瀑布流', url: './admin-waterfall.html', icon: 'fas fa-wind' },
-        { name: 'Movavi', url: 'https://www.movavi.com/zh/movavi-video-converter.html', icon: 'fas fa-file-video' },
-        { name: 'FreeConvert', url: 'https://www.freeconvert.com/zh/video-compressor', icon: 'fas fa-file' },
-        { name: 'YouCompress', url: 'https://www.youcompress.com/zh-cn/', icon: 'fas fa-file-zipper' },
-        { name: 'Cloudinary', url: 'https://console.cloudinary.com/', icon: 'fas fa-cloud' },
-      ],
-    },
-    computed: {
-      uniqueAlbums() {
-        const albums = new Set();
-        this.tableData.forEach(item => {
-          if (item.metadata && item.metadata.ListType) {
-            const type = item.metadata.ListType;
-            if (type !== 'None' && type !== 'Block' && type !== 'White') {
-              albums.add(type);
-            }
-          }
-        });
-        return Array.from(albums);
-      },
-      filteredTableData() {
-        return this.tableData.filter(data => {
-          const searchLower = this.search.toLowerCase();
-          const matchesSearch = !searchLower || [
-            (data.metadata.fileName || '').toLowerCase(),
-            data.name?.toLowerCase(),
-          ].some(field => field?.includes(searchLower));
+/* ══ Sidebar ═════════════════════════════════════════════════════════════════*/
+.sidebar {
+  width: var(--sidebar-w); flex-shrink: 0;
+  background: var(--surface); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden;
+  transition: width 0.25s;
+}
+.sidebar.collapsed { width: 0; }
 
-          const matchesFilter = {
-            'all': true,
-            'favorites': data.metadata.liked,
-            'blocked': data.metadata.ListType === 'Block',
-            'unblocked': data.metadata.ListType === 'White',
-            'adult': data.metadata.Label?.toLowerCase() === 'adult',
-          }[this.filterOption] ?? true;
+.sidebar-header {
+  padding: 14px 16px 10px; display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.sidebar-title { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text3); }
+.sidebar-actions { display: flex; gap: 2px; }
+.sbtn {
+  width: 26px; height: 26px; border-radius: 6px; border: none;
+  background: transparent; color: var(--text3); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 12px;
+  transition: all 0.15s;
+}
+.sbtn:hover { background: var(--accent-soft); color: var(--accent); }
 
-          let ext = '';
-          const fileNameToUse = (data.metadata && data.metadata.fileName) ? data.metadata.fileName : data.name;
-          if (fileNameToUse.includes('.')) {
-              ext = fileNameToUse.split('.').pop().toLowerCase();
-          }
+.album-tree { flex: 1; overflow-y: auto; padding: 8px 0; }
 
-          let matchesType = false;
-          if (this.fileType === 'document') {
-              matchesType = !Object.keys(this.fileConfig).some(type => 
-                  type !== 'document' && this.fileConfig[type].exts.includes(ext)
-              );
-          } else {
-              matchesType = this.fileConfig[this.fileType].exts.includes(ext);
-              if (ext === '' && this.fileType === 'image') {
-                  matchesType = true;
-              }
-          }
+/* Tree nodes */
+.tree-node { }
+.tree-row {
+  display: flex; align-items: center; padding: 0 10px; height: 32px;
+  cursor: pointer; border-radius: 6px; margin: 1px 6px;
+  transition: background 0.15s; position: relative; gap: 4px;
+}
+.tree-row:hover { background: var(--bg2); }
+.tree-row:hover .tree-ops { opacity: 1; }
+.tree-row.active { background: var(--accent-soft); }
+.tree-row.active .tree-name { color: var(--accent); font-weight: 500; }
 
-          let matchesAlbum = true;
-          if (this.selectedAlbum !== 'All') {
-            const itemAlbum = (data.metadata && data.metadata.ListType) ? data.metadata.ListType : 'None';
-            if (this.selectedAlbum === 'None') {
-              matchesAlbum = (itemAlbum === 'None' || itemAlbum === 'Block' || itemAlbum === 'White');
-            } else {
-              matchesAlbum = (itemAlbum === this.selectedAlbum);
-            }
-          }
+.tree-indent { flex-shrink: 0; }
+.tree-toggle {
+  width: 16px; height: 16px; border-radius: 4px; border: none;
+  background: transparent; color: var(--text3); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; flex-shrink: 0; transition: transform 0.15s, color 0.15s;
+}
+.tree-toggle:hover { color: var(--accent); }
+.tree-toggle.open { transform: rotate(90deg); }
+.tree-toggle.leaf { opacity: 0; pointer-events: none; }
 
-          let matchQuality = true;
-          if (this.fileType === 'image' && this.displayQuality !== 'all') {
-            const isPhoto = data.name.startsWith('A'); 
-            
-            if (this.displayQuality === 'preview') {
-              matchQuality = isPhoto;
-            } else if (this.displayQuality === 'original') {
-              matchQuality = !isPhoto;
-            }
-          }
+.tree-icon { font-size: 13px; flex-shrink: 0; color: var(--accent-dim); }
+.tree-row.active .tree-icon { color: var(--accent); }
+.tree-name { flex: 1; font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tree-count { font-size: 10px; color: var(--text3); background: var(--bg2); padding: 1px 6px; border-radius: 99px; flex-shrink: 0; }
 
-          return matchesSearch && matchesFilter && matchesType && matchesAlbum && matchQuality;
-        });
-      },
-      paginatedTableData() {
-        return this.sortData(this.filteredTableData)
-          .slice((this.currentPage - 1) * this.pageSize, this.currentPage * this.pageSize);
-      },
-      sortIcon() { return `fas fa-sort-${this.sortOption === 'dateDesc' ? 'amount-down' : 'alpha-up'}`; },
-      filterIcon() {
-        return this.filterOption === 'all' ? 'fas fa-filter' :
-        this.filterOption === 'favorites' ? 'fas fa-bookmark' :
-        this.filterOption === 'blocked' ? 'fas fa-lock' :
-        this.filterOption === 'unblocked' ? 'fas fa-unlock' :
-        this.filterOption === 'adult' ? 'fas fa-user-secret' : '';
-      },
-      fileTypeIcon() {
-        return this.fileType === 'image' ? 'fas fa-image' :
-        this.fileType === 'video' ? 'fas fa-video' :
-        this.fileType === 'audio' ? 'fas fa-music' :
-        this.fileType === 'document' ? 'fas fa-folder-open' : '';
-      }
-    },
-    watch: {  
-      tableData: {
-        handler(newData) {
-          this.selectedFiles = newData.filter(file => file.selected);
-        },
-        deep: true
-      },
-      sortOption(newOption) { localStorage.setItem('sortOption', newOption); },
-      
-      // 【核心监听】：一旦用户切换任何过滤条件，触发自动打捞补偿机制，防止页面变白
-      filterOption(newOption) { 
-        localStorage.setItem('filterOption', newOption); 
-        this.resetAndFetch(); 
-      },
-      selectedAlbum(newOption) { 
-        localStorage.setItem('selectedAlbum', newOption); 
-        this.resetAndFetch(); 
-      },
-      displayQuality(newOption) { 
-        localStorage.setItem('displayQuality', newOption); 
-        this.resetAndFetch(); 
-      },
-      fileType(newOption) { 
-        localStorage.setItem('fileType', newOption); 
-        this.resetAndFetch(); 
-      },
-      search() {
-        this.resetAndFetch();
-      }
-    },
-    methods: {
-      refreshDashboard() {location.reload();},  
-      handleLogout() { window.location.href = '/'; },  
-      handlePageChange(page) { this.currentPage = page; },  
-      handleUpload() { this.$refs.fileInput.click(); },  
-      sort(command) { this.sortOption = command; },  
-      filter(command) { this.filterOption = command; },  
-      selectAlbum(command) { this.selectedAlbum = command; },
-      switchQuality(command) { this.displayQuality = command; },
-      switchFileType(type) {  
-        this.fileType = type;
-        this.$message({
-          message: `已切换为${this.fileConfig[type].name}模式, 共${this.fileConfig[type].count}个文件`,
-          type: 'success',
-          duration: 1500
-        });
-      },
+.tree-ops {
+  display: flex; gap: 1px; opacity: 0; transition: opacity 0.15s; flex-shrink: 0;
+}
+.tree-op {
+  width: 20px; height: 20px; border-radius: 4px; border: none;
+  background: transparent; color: var(--text3); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 10px;
+  transition: all 0.15s;
+}
+.tree-op:hover { background: var(--accent-soft); color: var(--accent); }
+.tree-op.danger:hover { background: var(--danger-soft); color: var(--danger); }
 
-      // === 新增核心方法：切换条件后重置分页并尝试打捞 ===
-      resetAndFetch() {
-        this.currentPage = 1;
-        this.autoFetchCount = 0;
-        this.$nextTick(() => {
-          this.triggerAutoLoad();
-        });
-      },
+.tree-children { overflow: hidden; transition: max-height 0.2s ease; }
 
-      // === 核心提速机制：拉取 300 条 ===
-      async loadMore(isInitial = false) {
-        if (this.isLoading) return;
-        if (!isInitial && !this.nextCursor) return;
+/* Special tree items */
+.tree-special-label {
+  padding: 12px 16px 4px; font-size: 10px; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--text3);
+}
 
-        this.isLoading = true;
-        const opts = { method: 'GET', credentials: 'include' };
-        
-        // 单次拉取量提升到 300
-        let url = `./api/manage/list?limit=300`;
-        if (!isInitial && this.nextCursor) {
-          url += `&cursor=${encodeURIComponent(this.nextCursor)}`;
-        }
+/* New album inline input */
+.tree-new-input {
+  display: flex; align-items: center; gap: 6px;
+  margin: 2px 6px; padding: 0 10px; height: 32px;
+}
+.tree-new-input input {
+  flex: 1; height: 24px; padding: 0 8px; font-size: 12px;
+  border: 1px solid var(--accent); border-radius: 5px; outline: none;
+  background: var(--surface); color: var(--text); font-family: var(--font-sans);
+}
+.tree-new-confirm, .tree-new-cancel {
+  width: 22px; height: 22px; border-radius: 4px; border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0;
+}
+.tree-new-confirm { background: var(--success-soft); color: var(--success); }
+.tree-new-cancel { background: var(--danger-soft); color: var(--danger); }
 
-        try {
-          const response = await fetch(url, opts);
-          if (response.status === 401) {
-            window.location.href = "./api/manage/login";
-            return;
-          }
-          
-          const result = await response.json();
-          const files = result.keys || [];
-          
-          const mapped = files.map(file => ({
-            ...file,
-            selected: false,
-            metadata: {
-              ...file.metadata,
-              liked: file.metadata.liked ?? false,
-              fileName: file.metadata.fileName ?? file.name,
-              fileSize: file.metadata.fileSize ?? 0
-            }
-          }));
+/* ══ Main Content ════════════════════════════════════════════════════════════ */
+.main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
-          // concat 拼接新数据
-          this.tableData = this.tableData.concat(mapped);
-          this.nextCursor = result.list_complete ? null : result.cursor;
-          
-          this.updateStats();
-          this.sortData(this.tableData);
-          
-        } catch (e) {
-          this.$message.error('同步数据时出错，请检查网络连接');
-        } finally {
-          this.isLoading = false;
-          // 拉取完这一批，看看当前这页填满了没，没满继续拉
-          this.$nextTick(() => {
-            this.triggerAutoLoad();
-          });
-        }
-      },
+/* Toolbar */
+.toolbar {
+  padding: 10px 18px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: var(--surface); flex-shrink: 0;
+}
+.toolbar-left { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.toolbar-right { display: flex; align-items: center; gap: 6px; }
 
-      // === 智能打捞引擎 ===
-      triggerAutoLoad() {
-        // 如果当前过滤后的数据连一页（pageSize）都填不满，且服务器还有下一页，自动继续拉取。防死循环上限为 5。
-        if (this.filteredTableData.length < this.pageSize && this.nextCursor && !this.isLoading && this.autoFetchCount < 5) {
-          this.autoFetchCount++;
-          this.loadMore(false);
-        }
-      },
+/* Breadcrumb */
+.breadcrumb { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.bc-item {
+  font-size: 13px; color: var(--text2); cursor: pointer;
+  padding: 2px 6px; border-radius: 5px; transition: all 0.15s;
+  white-space: nowrap;
+}
+.bc-item:hover { color: var(--accent); background: var(--accent-soft); }
+.bc-item.current { color: var(--text); cursor: default; font-weight: 500; }
+.bc-item.current:hover { background: transparent; }
+.bc-sep { color: var(--border2); font-size: 11px; flex-shrink: 0; }
 
-      sortData(data) {
-        return this.sortOption === 'nameAsc' ? data.sort((a, b) => a.name.localeCompare(b.name)) :
-          this.sortOption === 'sizeDesc' ? data.sort((a, b) => b.metadata.fileSize - a.metadata.fileSize) :
-          data.sort((a, b) => b.metadata.TimeStamp - a.metadata.TimeStamp);
-      },
-      formattedFileDetails(item) {
-        const metadata = item.metadata;
-        const timestamp = new Date(metadata.TimeStamp).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-        const albumName = (metadata.ListType && !['None', 'Block', 'White'].includes(metadata.ListType)) ? metadata.ListType : '未分类';
-        return `
-          <div style="text-align: left; padding: 5px;">
-            <div><strong>ID：</strong>${item.name}</div>
-            <div><strong>文件名：</strong>${metadata.fileName || item.name}</div>
-            <div><strong>相册：</strong><span style="color: #409EFF;">${albumName}</span></div>
-            <div><strong>上传时间：</strong>${timestamp}</div>
-            <div style="max-width:300px; word-wrap:break-word;"><strong>元数据：</strong>${JSON.stringify(metadata)}</div>
-          </div>
-        `;
-      },
-      calculatePageSize() {  
-        const config = { minSize: 15, cardWidth: 240, ratio: 3/4, gap: 20, defaultWidth: 800, defaultHeaderHeight: 60 };
-        const content = document.querySelector('.content');
-        const header = document.querySelector('.header-content');
-        const width = content?.clientWidth || config.defaultWidth;
-        const height = window.innerHeight - (header?.offsetHeight || config.defaultHeaderHeight);
-        const cols = Math.floor(width / (config.cardWidth + config.gap));
-        const cardHeight = (width / cols - config.gap) * config.ratio;
-        const rows = Math.floor(height / (cardHeight + config.gap));
-        this.pageSize = Math.max(rows * cols, config.minSize);
-      },
-      updateWindowWidth() {  
-        this.windowWidth = window.innerWidth;
-        this.calculatePageSize();
-      },
-      updateStats() {
-        this.Number = this.tableData.length;
-        let fileCount = {image: 0, video: 0, audio: 0, document: 0};
-        this.tableData.forEach(file => {
-          const ext = file.name.split('.').pop().toLowerCase();
-          const type = Object.keys(this.fileConfig).find(t => this.fileConfig[t].exts.includes(ext)) || 'document';
-          fileCount[type]++;
-        });
-        Object.keys(this.fileConfig).forEach(type => {
-          this.fileConfig[type].count = fileCount[type] || 0;
-        });
-      },
+/* Filter tabs */
+.filter-tabs { display: flex; gap: 2px; background: var(--bg2); border-radius: 7px; padding: 3px; }
+.ftab {
+  padding: 4px 12px; border-radius: 5px; border: none; background: transparent;
+  color: var(--text2); font-size: 12px; font-weight: 500; cursor: pointer;
+  font-family: var(--font-sans); transition: all 0.18s; white-space: nowrap;
+}
+.ftab:hover { color: var(--text); }
+.ftab.active { background: var(--surface); color: var(--accent); box-shadow: var(--shadow); }
 
-      openLinkDialog() {
-        this.linkDialogVisible = true;
-        this.linkDialogTab = 'import'; 
-        this.generateExportUrls(); 
-      },
-      generateExportUrls() {
-        const sourceList = this.selectedFiles.length > 0 ? this.selectedFiles : this.filteredTableData;
-        this.exportUrls = sourceList.map(item => `![${item.metadata.fileName || item.name}](${this.baseURL}/file/${item.name})`).join('\n');
-      },
-      copyExportUrls() {
-        if (!this.exportUrls) return this.$message.warning('没有可导出的链接');
-        (navigator.clipboard?.writeText(this.exportUrls) || this.copyToClipboardFallback(this.exportUrls))
-          .then(() => this.$message.success('Markdown 链接已成功复制到剪贴板！'));
-      },
-      async handleImportUrls() {
-        let rawText = this.importUrls;
-        rawText = rawText.replace(/!\[.*?\]\((https?:\/\/[^\)]+)\)/g, "$1");
-        const urls = rawText.split(/\s+/).map(u => u.trim()).filter(u => /^https?:\/\//i.test(u));
-        const uniqueUrls = [...new Set(urls)];
+/* Toolbar button */
+.tbtn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: var(--radius); border: 1px solid var(--border);
+  background: var(--surface); color: var(--text2); font-size: 12px; font-weight: 500;
+  cursor: pointer; font-family: var(--font-sans); transition: all 0.18s; white-space: nowrap;
+}
+.tbtn:hover { border-color: var(--accent-dim); color: var(--accent); background: var(--accent-soft); }
+.tbtn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.tbtn.primary:hover { background: var(--accent-dim); border-color: var(--accent-dim); color: #fff; }
+.tbtn.danger { color: var(--danger); }
+.tbtn.danger:hover { background: var(--danger-soft); border-color: var(--danger); color: var(--danger); }
+.tbtn i { font-size: 11px; }
 
-        if (uniqueUrls.length === 0) return this.$message.warning('未检测到有效的图片网络链接');
+/* Selection bar */
+.selection-bar {
+  background: var(--accent-soft); border-bottom: 1px solid var(--accent-dim);
+  padding: 8px 18px; display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: var(--accent); flex-shrink: 0;
+}
+.selection-bar strong { font-weight: 600; }
 
-        this.isImporting = true;
-        let successCount = 0;
-        let failCount = 0;
-        const loading = this.$message({ message: `正在拉取 ${uniqueUrls.length} 个链接，请勿刷新页面...`, duration: 0 });
+/* File list */
+.file-list-wrap { flex: 1; overflow-y: auto; }
+.file-table { width: 100%; border-collapse: collapse; }
+.file-table thead th {
+  padding: 8px 12px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text3); background: var(--bg);
+  border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap;
+  position: sticky; top: 0; z-index: 2;
+}
+.file-table thead th:first-child { width: 36px; text-align: center; }
+.file-table thead th.col-name { min-width: 200px; }
+.file-table thead th.col-album { width: 160px; }
+.file-table thead th.col-size  { width: 80px; }
+.file-table thead th.col-date  { width: 140px; }
+.file-table thead th.col-ops   { width: 120px; text-align: right; }
 
-        const targetAlbum = (this.selectedAlbum === 'All' || this.selectedAlbum === 'None') ? 'None' : this.selectedAlbum;
-        const uploadEndpoint = targetAlbum !== 'None' ? `${this.baseURL}/upload?album=${encodeURIComponent(targetAlbum)}` : `${this.baseURL}/upload`;
+.file-row { border-bottom: 1px solid var(--border); transition: background 0.12s; }
+.file-row:hover { background: var(--bg2); }
+.file-row:hover .file-ops { opacity: 1; }
+.file-row.selected-row { background: var(--accent-soft); }
+.file-row.selected-row:hover { background: var(--accent-soft); }
 
-        for (let url of uniqueUrls) {
-            try {
-                let blob;
-                try {
-                    const res = await fetch(url);
-                    if (!res.ok) throw new Error('Direct fetch failed');
-                    blob = await res.blob();
-                } catch (e) {
-                    const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
-                    const res = await fetch(proxyUrl);
-                    if (!res.ok) throw new Error('Proxy fetch failed');
-                    blob = await res.blob();
-                }
+.file-row td { padding: 9px 12px; font-size: 13px; vertical-align: middle; }
+.file-row td:first-child { text-align: center; }
 
-                let filename = url.split('/').pop().split('?')[0] || `import_${Date.now()}`;
-                if (!filename.includes('.')) {
-                    const extMap = {'image/jpeg':'jpg', 'image/png':'png', 'image/gif':'gif', 'image/webp':'webp', 'video/mp4':'mp4'};
-                    const ext = extMap[blob.type] || 'png';
-                    filename += `.${ext}`;
-                }
-                
-                const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
-                const formData = new FormData();
-                formData.append('file', file);
-                
-                const uploadRes = await fetch(uploadEndpoint, {
-                    method: 'POST',
-                    body: formData,
-                    credentials: 'include'
-                });
+.file-icon-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.file-type-icon {
+  width: 30px; height: 30px; border-radius: 7px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 13px;
+}
+.file-type-icon.img  { background: #fde8d0; color: #c07d3e; }
+.file-type-icon.vid  { background: #dde8fd; color: #3e6ec0; }
+.file-type-icon.aud  { background: #e8ddf8; color: #6e3ec0; }
+.file-type-icon.doc  { background: #e8f5e9; color: #2d8653; }
 
-                const data = await uploadRes.json();
-                if (!uploadRes.ok || (Array.isArray(data) && data[0]?.error)) {
-                    throw new Error('Upload to backend failed');
-                }
+.file-name-wrap { min-width: 0; }
+.file-name { font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
+.file-id   { font-size: 10px; color: var(--text3); font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
 
-                if(data[0]?.src) {
-                   successCount++;
-                }
-            } catch (err) {
-                console.error(`Failed to import ${url}:`, err);
-                failCount++;
-            }
-        }
+.album-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 99px; font-size: 11px;
+  background: var(--accent-soft); color: var(--accent); white-space: nowrap;
+  max-width: 150px; overflow: hidden; text-overflow: ellipsis;
+}
+.album-tag.none { background: var(--bg2); color: var(--text3); }
+.liked-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
 
-        loading.close();
-        this.isImporting = false;
-        
-        if (successCount > 0) {
-            this.$message.success(`成功拉取并转存 ${successCount} 个文件`);
-            this.importUrls = '';
-            this.linkDialogVisible = false;
-            this.refreshFileList(); 
-        } else if (failCount > 0) {
-            this.$message.error(`拉取失败：全部 ${failCount} 个链接转存失败（可能原链接失效或防盗链过严）`);
-        }
-      },
+.file-date { color: var(--text2); font-size: 12px; white-space: nowrap; }
+.file-size { color: var(--text3); font-size: 12px; white-space: nowrap; }
 
-      async uploadFiles(event) {
-        const files = Array.from(event.target.files || []);
-        if (!files.length) return;
-        const config = this.uploadConfig;
-        const valid = [], invalid = [];
-        files.forEach(file => {
-          (file.size <= config.maxSize ? valid : invalid).push(file);
-        });
-        if(invalid.length) { this.$message.error(`文件超过${config.maxSize/1024/1024}MB: \n${invalid.map(f => f.name).join('\n')}`); }
-        if(!valid.length) { this.$message.info('没有符合条件的文件'); event.target.value = ''; return; }
+.file-ops {
+  display: flex; align-items: center; justify-content: flex-end; gap: 2px;
+  opacity: 0; transition: opacity 0.15s;
+}
+.fop {
+  width: 28px; height: 28px; border-radius: 6px; border: none;
+  background: transparent; color: var(--text3); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 12px;
+  transition: all 0.15s;
+}
+.fop:hover { background: var(--bg2); color: var(--accent); }
+.fop.danger:hover { background: var(--danger-soft); color: var(--danger); }
 
-        try {
-          await this.$confirm(`确定要上传这 ${valid.length} 个文件吗?`, '提示', { type: 'warning' });
-          const loading = this.$message({ message: '上传中...', duration: 0 });
-          let [successCount, failed] = [0, []];
+/* Checkbox custom */
+.cb-wrap { width: 16px; height: 16px; position: relative; cursor: pointer; }
+.cb-wrap input[type=checkbox] { position: absolute; opacity: 0; width: 100%; height: 100%; cursor: pointer; z-index: 1; }
+.cb-box {
+  width: 16px; height: 16px; border: 1.5px solid var(--border2); border-radius: 4px;
+  background: var(--surface); display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s; font-size: 9px; color: transparent;
+}
+.cb-wrap input:checked ~ .cb-box { background: var(--accent); border-color: var(--accent); color: #fff; }
+.cb-wrap input:checked ~ .cb-box::after { content: '✓'; }
 
-          const targetAlbum = (this.selectedAlbum === 'All' || this.selectedAlbum === 'None') ? 'None' : this.selectedAlbum;
-          const uploadEndpoint = targetAlbum !== 'None' ? `${this.baseURL}/upload?album=${encodeURIComponent(targetAlbum)}` : `${this.baseURL}/upload`;
+/* Empty state */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 80px 20px; text-align: center; color: var(--text3);
+}
+.empty-icon { font-size: 40px; margin-bottom: 16px; color: var(--border2); }
+.empty-state h3 { font-family: var(--font-serif); font-weight: 400; font-size: 18px; color: var(--text2); margin-bottom: 6px; }
+.empty-state p { font-size: 13px; line-height: 1.6; }
 
-          const upload = async file => {
-            try {
-              const formData = new FormData();
-              formData.append('file', file);
-              const res = await fetch(uploadEndpoint, {
-                method: 'POST',
-                body: formData,
-                credentials: 'include'
-              });
-              const data = await res.json();
-              if (!res.ok || (Array.isArray(data) && data[0]?.error)) {
-                throw new Error(data[0]?.error || '上传失败');
-              }
-              const src = data[0]?.src;
-              if (!src) throw new Error('未返回文件路径');
-              
-              successCount++;
-            } catch (err) {
-              failed.push(`${file.name} (${err.message})`);
-            }
-          };
-          for (let i = 0; i < valid.length; i += config.maxConcurrent) {
-            await Promise.all(valid.slice(i, i + config.maxConcurrent).map(upload));
-          }
-          loading.close();
-          successCount && this.$message.success(`成功上传 ${successCount} 个文件`);
-          failed.length && this.$message.error(`上传失败: ${failed.join(', ')}`);
-          this.refreshFileList();
-        } catch {
-          this.$message.info('已取消上传');
-        }
-        event.target.value = '';
-      },
+/* Pagination */
+.pagination-bar {
+  padding: 12px 18px; border-top: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--surface); flex-shrink: 0; font-size: 12px; color: var(--text3);
+}
+.pg-btns { display: flex; gap: 4px; }
+.pg-btn {
+  width: 30px; height: 30px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text2); cursor: pointer; font-size: 12px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s; font-family: var(--font-sans);
+}
+.pg-btn:hover { border-color: var(--accent-dim); color: var(--accent); }
+.pg-btn.current { background: var(--accent); color: #fff; border-color: var(--accent); }
+.pg-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-      refreshFileList() {  
-        // 彻底重置状态，并利用优化后的引擎重新加载
-        this.tableData = [];
-        this.nextCursor = null;
-        this.loadMore(true);
-      },
+/* ══ Dialogs ═════════════════════════════════════════════════════════════════ */
+.modal-mask {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+  backdrop-filter: blur(3px); z-index: 500;
+  display: flex; align-items: center; justify-content: center;
+  animation: fadeIn 0.15s ease;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-      toggleSelect(index, name) {
-        const fileIndex = this.tableData.findIndex(file => file.name === name);
-        this.tableData[fileIndex].selected = !this.tableData[fileIndex].selected;
-      },
-      toggleLike(index, name) {
-        const fileIndex = this.tableData.findIndex(file => file.name === name);
-        this.tableData[fileIndex].metadata.liked = !(this.tableData[fileIndex].metadata.liked ?? false);
-        var requestOptions = { method: 'GET', redirect: 'follow', credentials: 'include' };
-        fetch(`./api/manage/toggleLike/${name}`, requestOptions)
-          .then(response => response.json())
-          .then(result => {
-            if (!result.success) {  
-              this.tableData[fileIndex].metadata.liked = !this.tableData[fileIndex].metadata.liked;
-              this.$message({message: '更新收藏状态失败，请稍后重试', type: 'error'});
-            } else {
-              this.$message.success(this.tableData[fileIndex].metadata.liked ? '收藏成功' : '取消收藏');
-            }
-          })
-          .catch(error => { 
-            this.tableData[fileIndex].metadata.liked = !this.tableData[fileIndex].metadata.liked;
-            this.$message({message: '同步服务器失败，请检查网络连接', type: 'error'});
-          });
-      },
-      handleDelete(index, key) {
-        this.$confirm('此操作将永久删除该文件, 是否继续?', '提示', {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          type: 'warning'
-        }).then(() => {
-          fetch(`./api/manage/delete/${key}`, { method: 'GET', credentials: 'include' })
-            .then(response => response.ok ? this.tableData.splice(index, 1) : Promise.reject())
-            .then(() => {
-              this.updateStats();
-              this.$message.success('删除成功！');
-            })
-            .catch(() => this.$message.error('删除失败，请检查网络连接'));
-        }).catch(() => this.$message.info('已取消删除'));
-      },
-      copyToClipboardFallback(text) {
-        const textarea = document.createElement('textarea');
-        document.body.appendChild(textarea);
-        textarea.style.position = 'fixed';
-        textarea.style.clip = 'rect(0 0 0 0)';
-        textarea.style.top = '10px';
-        textarea.value = text;
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-      },
-      handleCopy(index, key) {
-        const link = `${this.baseURL}/file/${key}`;
-        (navigator.clipboard?.writeText(link) || this.copyToClipboardFallback(link))
-          .then(() => this.$message.success('复制文件链接成功~'))
-          .catch(() => this.$message.error('自动复制失败，请手动复制链接：' + link));
-      },
-      selectAllInPage() {  
-        const selected = !this.paginatedTableData.every(file => file.selected);
-        this.paginatedTableData.forEach(file => file.selected = selected);
-      },
-      
-      handleBatchMoveAlbum() {
-        if (this.selectedFiles.length === 0) {
-          this.$message.warning('请先选择文件');
-          return;
-        }
-        this.$prompt('请输入目标相册名称（输入新名称或现有名称）', '批量移动到相册', {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          inputValidator: (value) => {
-            if (!value || !value.trim()) return '相册名称不能为空';
-            return true;
-          }
-        }).then(({ value }) => {
-          const targetAlbum = value.trim();
-          const loading = this.$message({ message: '正在移动...', duration: 0 });
-          const promises = this.selectedFiles.map(file =>
-            fetch(`./api/manage/moveAlbum/${file.name}?newAlbum=${encodeURIComponent(targetAlbum)}`, { method: 'GET', credentials: 'include' })
-          );
+.modal-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; box-shadow: 0 24px 64px rgba(0,0,0,0.25);
+  width: 580px; max-width: calc(100vw - 32px); max-height: 85vh;
+  display: flex; flex-direction: column; animation: slideUp 0.2s ease;
+}
+.modal-box.wide { width: 680px; }
+@keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 
-          Promise.all(promises).then(responses => {
-            let successCount = 0;
-            responses.forEach((response, index) => {
-              if (response.ok) {
-                const fileIndex = this.tableData.findIndex(item => item.name === this.selectedFiles[index].name);
-                if (fileIndex !== -1) {
-                  this.tableData[fileIndex].metadata.ListType = targetAlbum; 
-                }
-                successCount++;
-              }
-            });
-            loading.close();
-            this.$message.success(`成功将 ${successCount} 个文件移动到相册：${targetAlbum}`);
-            this.selectedFiles.forEach(file => file.selected = false);
-            this.selectedFiles = [];
-          }).catch(() => {
-            loading.close();
-            this.$message.error('移动失败，请确保后端已配置 /api/manage/moveAlbum 接口');
-          });
-        }).catch(() => {});
-      },
+.modal-header {
+  padding: 18px 22px 14px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+}
+.modal-title { font-family: var(--font-serif); font-size: 16px; font-weight: 600; color: var(--text); }
+.modal-close {
+  width: 28px; height: 28px; border-radius: 6px; border: none;
+  background: transparent; color: var(--text3); cursor: pointer; font-size: 14px;
+  display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+}
+.modal-close:hover { background: var(--bg2); color: var(--text); }
 
-      handleBatchDelete() {  
-        this.$confirm('此操作将永久删除这 ' + this.selectedFiles.length + ' 个文件, 是否继续?', '提示', {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          type: 'warning'
-        }).then(() => {
-          const promises = this.selectedFiles.map(file => fetch(`./api/manage/delete/${file.name}`, { method: 'GET', credentials: 'include' }));
+.modal-body { padding: 20px 22px; overflow-y: auto; flex: 1; }
+.modal-footer {
+  padding: 14px 22px; border-top: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-shrink: 0;
+}
 
-          Promise.all(promises)
-            .then(results => {
-              results.forEach((response, index) => {
-                if (response.ok) {
-                  const fileIndex = this.tableData.findIndex(file => file.name === this.selectedFiles[index].name);
-                  if (fileIndex !== -1) {
-                    this.tableData.splice(fileIndex, 1);
-                  }
-                }
-              });
-              this.selectedFiles = [];
-              this.updateStats();
-              this.$message.success('批量删除成功!');
-            })
-            .catch(() => this.$message.error('批量删除失败，请检查网络连接'));
-        }).catch(() => this.$message.info('已取消批量删除'));
-      },
-      handleBatchCopy() {  
-        const links = this.selectedFiles.map(file => `![图片](${document.location.origin}/file/${file.name})`).join('\n');
-        (navigator.clipboard?.writeText(links) || this.copyToClipboardFallback(links))
-          .then(() => this.$message.success('批量复制 Markdown 链接成功~'));
-      },
-      handleBatchDownload() {  
-        this.$message.info(`正在下载 ${this.selectedFiles.length} 个文件`, { duration: 1000 });
-        this.selectedFiles.forEach((file, index) => {
-          setTimeout(() => {
-            const link = document.createElement('a');
-            link.href = `/file/${file.name}`;
-            link.download = file.metadata.fileName || file.name;
-            link.click();
-          }, index * 800);
-        });
-        this.selectedFiles = [];
-      },
-      handleBatchBlockOrUnblock(type) {  
-        if (type !== 'Block' && type !== 'White') { this.$message.error('无效的操作类型'); return; }
-        const typeToName = { Block: '黑名单', White: '白名单' };
-        this.$confirm(`确定要将这 ${this.selectedFiles.length} 个文件加入${typeToName[type]}吗?`, '提示', {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          type: 'warning'
-        }).then(() => {
-          const promises = this.selectedFiles.map(file => fetch(`./api/manage/${type.toLowerCase()}/${file.name}`, { method: 'GET', credentials: 'include' }));
+/* Form elements */
+.form-group { margin-bottom: 16px; }
+.form-label { display: block; font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 6px; letter-spacing: 0.04em; }
+.form-input, .form-textarea, .form-select {
+  width: 100%; padding: 9px 12px; border: 1px solid var(--border2); border-radius: var(--radius);
+  background: var(--bg); color: var(--text); font-family: var(--font-sans); font-size: 13px;
+  transition: border-color 0.2s, background 0.2s; outline: none;
+}
+.form-input:focus, .form-textarea:focus, .form-select:focus { border-color: var(--accent); background: var(--surface); }
+.form-textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
+.form-hint { margin-top: 5px; font-size: 11px; color: var(--text3); line-height: 1.5; }
+.form-hint code { background: var(--bg2); padding: 1px 5px; border-radius: 4px; font-family: monospace; }
 
-          Promise.all(promises)
-            .then(responses => {
-              responses.forEach((response, index) => {
-                if (response.ok) {
-                  const fileIndex = this.tableData.findIndex(item => item.name === this.selectedFiles[index].name);
-                  if (fileIndex !== -1) {
-                    this.tableData[fileIndex].metadata.ListType = type;
-                  }
-                }
-              });
-              this.$message.success(`批量加入${typeToName[type]}成功`);
-              this.selectedFiles = [];
-            })
-            .catch(() => this.$message.error(`操作失败，请检查网络连接`));
-        });
-      },
-      handleBatchOperation(command) {
-        if (this.selectedFiles.length === 0) { this.$message.warning('请先选择文件'); return; }
-        switch (command) {
-          case 'copy': this.handleBatchCopy(); break;
-          case 'moveAlbum': this.handleBatchMoveAlbum(); break;
-          case 'delete': this.handleBatchDelete(); break;
-          case 'download': this.handleBatchDownload(); break;
-          case 'block': this.handleBatchBlockOrUnblock('Block'); break;
-          case 'unblock': this.handleBatchBlockOrUnblock('White'); break;
-        }
-      },
+/* Tab pills in modal */
+.modal-tabs { display: flex; gap: 2px; margin-bottom: 18px; background: var(--bg2); border-radius: 7px; padding: 3px; }
+.mtab {
+  flex: 1; padding: 7px; border-radius: 5px; border: none; background: transparent;
+  color: var(--text2); font-size: 13px; font-weight: 500; cursor: pointer;
+  font-family: var(--font-sans); transition: all 0.15s; text-align: center;
+}
+.mtab.active { background: var(--surface); color: var(--accent); box-shadow: var(--shadow); }
 
-      handleRenameAlbum() {
-        if (this.selectedAlbum === 'All' || this.selectedAlbum === 'None') {
-          this.$message.warning('系统默认相册无法重命名，请选择自定义相册');
-          return;
-        }
-        
-        if (this.nextCursor) {
-          this.$message.warning('请一直点击页面底部的“加载更多”，直到加载完该相册的所有文件后再进行重命名操作，以防遗漏。');
-          return;
-        }
-
-        this.$prompt(`将当前相册 "${this.selectedAlbum}" 重命名为：`, '重命名相册', {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          inputValue: this.selectedAlbum,
-          inputValidator: (value) => {
-            if (!value || !value.trim()) return '相册名称不能为空';
-            if (value.trim() === this.selectedAlbum) return '名称未发生改变';
-            return true;
-          }
-        }).then(({ value }) => {
-          const newAlbumName = value.trim();
-          const filesToRename = this.tableData.filter(item => item.metadata && item.metadata.ListType === this.selectedAlbum);
-
-          if (filesToRename.length === 0) {
-            this.$message.info('当前相册为空');
-            return;
-          }
-
-          const loading = this.$message({ message: `正在重命名 ${filesToRename.length} 个文件，请耐心等待...`, duration: 0 });
-          const promises = filesToRename.map(file =>
-            fetch(`./api/manage/moveAlbum/${file.name}?newAlbum=${encodeURIComponent(newAlbumName)}`, { method: 'GET', credentials: 'include' })
-          );
-
-          Promise.all(promises).then(responses => {
-            let successCount = 0;
-            responses.forEach((response, index) => {
-              if (response.ok) {
-                const fileIndex = this.tableData.findIndex(item => item.name === filesToRename[index].name);
-                if (fileIndex !== -1) {
-                  this.tableData[fileIndex].metadata.ListType = newAlbumName;
-                }
-                successCount++;
-              }
-            });
-            loading.close();
-            this.$message.success(`重命名完成！成功更新了 ${successCount} 个文件`);
-            this.selectedAlbum = newAlbumName; 
-          }).catch(() => {
-            loading.close();
-            this.$message.error('部分重命名失败，请检查网络连接或后端接口');
-          });
-        }).catch(() => {});
-      },
-
-      handleToolkit(command) {
-        switch (command) {
-          case 'selectAllInPage': this.selectAllInPage(); break;
-          case 'renameAlbum': this.handleRenameAlbum(); break;
-          case 'checkBrokenFiles': this.checkBrokenFiles(); break;
-          case 'editWebsites': this.editWebsites(); break;
-        }
-      },
-      checkBrokenFiles() {  
-        const loadingMessage = this.$message({ message: '正在检测失效文件...', duration: 0});
-
-        let brokenCount = 0;
-        const promises = this.tableData.map((item, index) => {
-          const fileIndex = this.tableData.findIndex(item => item.name === this.selectedFiles[index].name);
-          return new Promise((resolve) => {
-            fetch(`${this.baseURL}/file/${item.name}`, {
-              method: 'HEAD',
-              cache: 'no-cache'  
-            })
-              .then(response => {
-                if (!response.ok) {
-                  brokenCount++;
-                  this.tableData[fileIndex].selected = true;
-                  resolve({ index, status: 'error' });
-                } else {
-                  resolve({ index, status: 'success' });
-                }
-              })
-              .catch(() => {
-                brokenCount++;
-                this.tableData[fileIndex].selected = true;
-                resolve({ index, status: 'error' });
-              });
-          });
-        });
-
-        Promise.all(promises).then(() => {
-          loadingMessage.close();
-          if (brokenCount > 0) {
-            this.$message({
-              dangerouslyUseHTMLString: true,
-              message: `检测到 ${brokenCount} 个失效文件，已自动选中。<br>您可以使用批量删除功能移除它们。`,
-              type: 'warning',
-              duration: 5000
-            });
-          } else {
-            this.$message({
-              message: '未检测到失效文件',
-              type: 'success'
-            });
-          }
-        });
-      },
-      handleWebsite(url) { window.open(url, '_blank'); },
-      editWebsites() {
-        const websiteText = this.quickWebsites
-          .map(site => `${site.name}|${site.url}|${site.icon}`)
-          .join('\n');
-
-        this.$prompt('', '编辑快捷方式', {
-          inputType: 'textarea',
-          inputValue: websiteText,
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          dangerouslyUseHTMLString: true,
-          customClass: 'website-edit-dialog',
-          message: `
-            <div>
-              每行一个网站，格式：名称|网址|图标类名<br>
-              图标需在 <a href="https://fontawesome.com/v6/search?m=free" target="_blank" style="color: #409EFF; text-decoration: underline">Font Awesome</a> 中选择
-            </div>
-          `,
-          inputValidator: (value) => {
-            const lines = value.split('\n');
-            if (lines.length > 10) return '不能超过10行';
-            for (let line of lines) {
-              if (!line.trim()) continue;
-              const [name, url, icon = 'fas fa-link'] = line.split('|');
-              if (!name || !url) return '名称和网址不能为空：' + line;
-              if (!(/^https?:\/\/.+/.test(url) || /^\.\/.*/.test(url))) return '网址格式错误：'+line;
-              if (!/^(fas?|fa-brands|fa-regular|fa-solid)\s+fa-[a-z0-9-]+$/.test(icon)) {
-                return '图标类名格式错误：' + line;
-              }
-            }
-            return true;
-          }
-        }).then(({ value }) => {
-          const newSites = value.split('\n')
-            .filter(line => line.trim())
-            .map(line => {
-              const [name, url, icon = 'fas fa-link'] = line.split('|');
-              return { name, url, icon };
-            });
-          this.quickWebsites = newSites;
-          localStorage.setItem('quickWebsites', JSON.stringify(newSites));
-          this.$message.success('保存成功');
-        }).catch(() => {});
-      },
-      getFileIcon(filename) {
-        const ext = filename.split('.').pop().toLowerCase();
-        const iconMap = {
-          'pdf': 'fas fa-file-pdf',
-          'doc,docx': 'fas fa-file-word',
-          'xls,xlsx,csv': 'fas fa-file-excel',
-          'ppt,pptx': 'fas fa-file-powerpoint',
-          'txt,md,log': 'fas fa-file-lines',
-          'zip,rar,7z,tar,gz': 'fas fa-file-zipper',
-          'html,htm,css,js,ts,jsx,tsx,vue,php,py,java,c,cpp,h,hpp,cs,go,rs,rb,pl,sh,sql': 'fas fa-file-code',
-          'json,xml,yaml,yml,toml': 'fas fa-file-code',
-          'mp4,avi,mov,wmv,flv,mkv,webm': 'fas fa-file-video',
-          'mp3,wav,ogg,flac,aac,m4a,wma': 'fas fa-file-audio',
-          'jpg,jpeg,png,gif,bmp,webp,svg,ico': 'fas fa-file-image',
-          'psd,ai,eps,cdr': 'fas fa-file-image',
-          'exe,msi,app,dmg,deb,rpm': 'fas fa-file-arrow-down'
-        };
-        for(const [exts, icon] of Object.entries(iconMap)) {
-          if(exts.split(',').includes(ext)) {
-            return icon;
-          }
-        }
-        return 'fas fa-file';
-      },
-      getFileType(filename) {
-        const ext = filename.split('.').pop();
-        return `${ext.toUpperCase()}`;
-      },
-      handleEditName(item) {
-        this.$prompt('', '修改文件名', {
-          inputValue: item.metadata?.fileName || item.name,
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          inputValidator: (value) => {
-            if (!value) return '文件名不能为空';
-            if (value.length > 64) return '文件名不能超过64个字符';
-            return true;
-          }
-        }).then(({ value }) => {
-          fetch(`./api/manage/editName/${item.name}?newName=${encodeURIComponent(value)}`, {
-            method: 'GET',
-            credentials: 'include'
-          })
-          .then(response => response.json())
-          .then(result => {
-            if (result.success) {
-              item.metadata.fileName = value;
-              this.$message.success('文件名修改成功');
-            } else {
-              this.$message.error('文件名修改失败');
-            }
-          })
-          .catch(() => this.$message.error('修改文件名时出错，请检查网络连接'));
-        }).catch(() => {});
-      }
-    },
-    mounted() {
-      window.addEventListener('resize', this.calculatePageSize);
-      this.updateWindowWidth();
-      fetch("./api/manage/check", { method: 'GET', credentials: 'include' })
-        .then(response => response.text())
-        .then(result => result === "true" ? this.showLogoutButton = true : window.location.href = "./api/manage/login")
-        .catch(() => this.$message.error('同步数据时出错，请检查网络连接'));
-
-      // 恢复记忆设置
-      this.sortOption = localStorage.getItem('sortOption') || this.sortOption;
-      this.fileType = localStorage.getItem('fileType') || this.fileType;
-      this.selectedAlbum = localStorage.getItem('selectedAlbum') || this.selectedAlbum;
-      this.displayQuality = localStorage.getItem('displayQuality') || 'all'; 
-
-      if (localStorage.getItem('quickWebsites')) {
-        this.quickWebsites = JSON.parse(localStorage.getItem('quickWebsites'));
-      }
-
-      // 触发具有提速优化引擎的首次加载
-      this.loadMore(true);
-    },
-    beforeDestroy() {
-      window.removeEventListener('resize', this.calculatePageSize);
-    }
-  });
-</script>
-</html>
+/* Link display */
+.link-list { display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; }
+.link-row {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+  background: var(--bg2); border-radius: 6px; font-size: 12px; font-family: monospace;
+  color: var(--text2); cursor: pointer; border: 1px solid transparent; transition: all 0.15s;
+}
+.link-row:hover { border-color: var(--accent-dim
