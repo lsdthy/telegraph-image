@@ -433,4 +433,1061 @@ body {
   background: var(--bg2); border-radius: 6px; font-size: 12px; font-family: monospace;
   color: var(--text2); cursor: pointer; border: 1px solid transparent; transition: all 0.15s;
 }
-.link-row:hover { border-color: var(--accent-dim
+.link-row:hover { border-color: var(--accent-dim); color: var(--accent); background: var(--accent-soft); }
+
+/* Move album modal tree */
+.move-tree { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.move-tree-inner { max-height: 280px; overflow-y: auto; padding: 4px 0; }
+.move-row {
+  display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+  cursor: pointer; font-size: 13px; color: var(--text); transition: background 0.12s;
+}
+.move-row:hover { background: var(--bg2); }
+.move-row.selected { background: var(--accent-soft); color: var(--accent); }
+
+/* ══ Notifications ════════════════════════════════════════════════════════════ */
+.toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.toast {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 9px;
+  padding: 12px 16px; display: flex; align-items: center; gap: 10px;
+  box-shadow: var(--shadow); font-size: 13px; color: var(--text);
+  animation: toastIn 0.25s ease; pointer-events: auto; min-width: 240px; max-width: 380px;
+}
+.toast.success .toast-dot { background: var(--success); }
+.toast.error   .toast-dot { background: var(--danger); }
+.toast.info    .toast-dot { background: var(--info); }
+.toast-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.toast-msg { flex: 1; line-height: 1.4; }
+.toast-close { color: var(--text3); cursor: pointer; font-size: 12px; transition: color 0.15s; }
+.toast-close:hover { color: var(--text); }
+@keyframes toastIn { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } }
+
+/* Loading */
+.loading-row td { text-align: center; padding: 40px; color: var(--text3); font-size: 13px; }
+.spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 8px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .file-table thead th.col-album, .file-table thead th.col-size, .file-row td:nth-child(4), .file-row td:nth-child(5) { display: none; }
+  .modal-box { width: calc(100vw - 24px); }
+}
+
+/* ── Element UI overrides ── */
+.el-tooltip__popper { font-family: var(--font-sans) !important; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ══ HEADER ══ -->
+  <header class="app-header">
+    <div class="app-logo" @click="refreshAll">ImgTC <sub>Admin</sub></div>
+    <div class="header-sep"></div>
+
+    <div class="header-search">
+      <i class="fas fa-search search-ico"></i>
+      <input v-model="search" placeholder="搜索文件名…" @input="currentPage=1">
+    </div>
+
+    <div class="header-stat" @click="openLinkDialog">
+      <i class="fas fa-database" style="font-size:11px"></i>
+      <span>{{ tableData.length }} 条记录</span>
+    </div>
+
+    <div class="header-sep"></div>
+
+    <div class="header-actions">
+      <button class="hbtn" :title="darkMode?'浅色模式':'深色模式'" @click="toggleTheme">
+        <i :class="darkMode ? 'fas fa-sun' : 'fas fa-moon'"></i>
+      </button>
+      <button class="hbtn" title="上传文件" @click="$refs.fileInput.click()">
+        <i class="fas fa-upload"></i>
+      </button>
+      <button class="hbtn" title="链接工具" @click="openLinkDialog">
+        <i class="fas fa-link"></i>
+      </button>
+      <button class="hbtn" title="刷新" @click="refreshAll">
+        <i class="fas fa-sync-alt" :class="{ 'fa-spin': isLoading }"></i>
+      </button>
+      <button class="hbtn" title="退出登录" @click="handleLogout" style="margin-left:4px">
+        <i class="fas fa-sign-out-alt"></i>
+      </button>
+    </div>
+    <input type="file" ref="fileInput" style="display:none" multiple @change="uploadFiles">
+  </header>
+
+  <!-- ══ BODY ══ -->
+  <div class="app-body">
+
+    <!-- ── SIDEBAR ── -->
+    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+      <div class="sidebar-header">
+        <span class="sidebar-title">相册目录</span>
+        <div class="sidebar-actions">
+          <button class="sbtn" title="新建根目录相册" @click="startNewAlbum(null)"><i class="fas fa-plus"></i></button>
+          <button class="sbtn" title="折叠侧栏" @click="sidebarCollapsed=true"><i class="fas fa-chevron-left"></i></button>
+        </div>
+      </div>
+
+      <div class="album-tree">
+        <!-- All / None shortcuts -->
+        <div class="tree-row" :class="{ active: selectedAlbum === 'All' }" @click="setAlbum('All')">
+          <div class="tree-toggle leaf"></div>
+          <i class="tree-icon fas fa-layer-group"></i>
+          <span class="tree-name">全部文件</span>
+          <span class="tree-count">{{ tableData.length }}</span>
+        </div>
+        <div class="tree-row" :class="{ active: selectedAlbum === 'None' }" @click="setAlbum('None')">
+          <div class="tree-toggle leaf"></div>
+          <i class="tree-icon fas fa-inbox"></i>
+          <span class="tree-name">未分类</span>
+          <span class="tree-count">{{ uncategorizedCount }}</span>
+        </div>
+
+        <div class="tree-special-label">自定义相册</div>
+
+        <!-- New root album input -->
+        <div class="tree-new-input" v-if="newAlbumParent === '__root__'">
+          <input ref="newAlbumInput" v-model="newAlbumName" placeholder="相册名称…"
+                 @keyup.enter="confirmNewAlbum" @keyup.esc="cancelNewAlbum">
+          <button class="tree-new-confirm" @click="confirmNewAlbum"><i class="fas fa-check"></i></button>
+          <button class="tree-new-cancel"  @click="cancelNewAlbum"><i class="fas fa-times"></i></button>
+        </div>
+
+        <!-- Recursive tree -->
+        <album-node v-for="(node, key) in albumTree"
+                    :key="key" :node="node" :node-key="key"
+                    :selected-album="selectedAlbum"
+                    :new-album-parent="newAlbumParent"
+                    :new-album-name-prop="newAlbumName"
+                    :depth="0"
+                    @select="setAlbum"
+                    @rename="promptRenameAlbum"
+                    @delete="promptDeleteAlbum"
+                    @add-child="startNewAlbum"
+                    @confirm-new="confirmNewAlbum"
+                    @cancel-new="cancelNewAlbum"
+                    @new-name-change="newAlbumName=$event">
+        </album-node>
+      </div>
+    </aside>
+
+    <!-- ── MAIN ── -->
+    <main class="main-content">
+
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <div class="toolbar-left">
+
+          <!-- Sidebar toggle if collapsed -->
+          <button class="tbtn" v-if="sidebarCollapsed" @click="sidebarCollapsed=false" title="展开相册树">
+            <i class="fas fa-sitemap"></i>
+          </button>
+
+          <!-- Breadcrumb -->
+          <div class="breadcrumb">
+            <span class="bc-item" :class="{ current: selectedAlbum==='All' }" @click="setAlbum('All')">全部</span>
+            <template v-if="selectedAlbum !== 'All'">
+              <span class="bc-sep">›</span>
+              <template v-for="(seg, i) in albumBreadcrumb">
+                <span class="bc-item" :class="{ current: i===albumBreadcrumb.length-1 }"
+                      @click="setAlbum(albumBreadcrumb.slice(0,i+1).join('/'))">{{ seg }}</span>
+                <span class="bc-sep" v-if="i<albumBreadcrumb.length-1">›</span>
+              </template>
+            </template>
+          </div>
+
+          <span style="color:var(--text3);font-size:12px">{{ filteredTableData.length }} 项</span>
+        </div>
+
+        <div class="toolbar-right">
+          <!-- File type filter -->
+          <div class="filter-tabs">
+            <button class="ftab" :class="{ active: fileType==='all' }"      @click="fileType='all'">全部</button>
+            <button class="ftab" :class="{ active: fileType==='image' }"    @click="fileType='image'">图片</button>
+            <button class="ftab" :class="{ active: fileType==='video' }"    @click="fileType='video'">视频</button>
+            <button class="ftab" :class="{ active: fileType==='audio' }"    @click="fileType='audio'">音频</button>
+            <button class="ftab" :class="{ active: fileType==='document' }" @click="fileType='document'">文件</button>
+          </div>
+
+          <!-- Sort -->
+          <el-dropdown @command="sortOption=$event" :hide-on-click="true">
+            <button class="tbtn"><i class="fas fa-sort-amount-down" style="font-size:11px"></i> 排序</button>
+            <el-dropdown-menu slot="dropdown">
+              <el-dropdown-item command="dateDesc" :class="{selected:sortOption==='dateDesc'}">时间倒序</el-dropdown-item>
+              <el-dropdown-item command="nameAsc"  :class="{selected:sortOption==='nameAsc'}">名称升序</el-dropdown-item>
+              <el-dropdown-item command="sizeDesc" :class="{selected:sortOption==='sizeDesc'}">大小倒序</el-dropdown-item>
+            </el-dropdown-menu>
+          </el-dropdown>
+
+          <!-- More filters -->
+          <el-dropdown @command="filterOption=$event" :hide-on-click="true">
+            <button class="tbtn"><i class="fas fa-filter" style="font-size:11px"></i>
+              <span v-if="filterOption!=='all'" style="color:var(--accent)">·</span>
+            </button>
+            <el-dropdown-menu slot="dropdown">
+              <el-dropdown-item command="all">全部文件</el-dropdown-item>
+              <el-dropdown-item command="favorites">收藏</el-dropdown-item>
+              <el-dropdown-item command="blocked">黑名单</el-dropdown-item>
+            </el-dropdown-menu>
+          </el-dropdown>
+
+          <!-- Load more -->
+          <button class="tbtn" v-if="nextCursor" @click="loadMore(false)" :disabled="isLoading">
+            <span class="spinner" v-if="isLoading"></span>
+            <i class="fas fa-cloud-download-alt" v-else style="font-size:11px"></i>
+            {{ isLoading ? '加载中…' : '加载更多' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Selection actions bar -->
+      <div class="selection-bar" v-if="selectedFiles.length > 0">
+        <i class="fas fa-check-square"></i>
+        已选 <strong>{{ selectedFiles.length }}</strong> 项
+        <button class="tbtn" @click="openBatchCopyDialog"><i class="fas fa-copy"></i> 复制链接</button>
+        <button class="tbtn" @click="openMoveDialog"><i class="fas fa-folder-open"></i> 移动相册</button>
+        <button class="tbtn" @click="handleBatchDownload"><i class="fas fa-download"></i> 下载</button>
+        <button class="tbtn danger" @click="handleBatchDelete"><i class="fas fa-trash"></i> 删除</button>
+        <button class="tbtn" style="margin-left:auto" @click="clearSelection"><i class="fas fa-times"></i> 取消选择</button>
+      </div>
+
+      <!-- File list -->
+      <div class="file-list-wrap">
+        <table class="file-table">
+          <thead>
+            <tr>
+              <th>
+                <label class="cb-wrap">
+                  <input type="checkbox" :checked="allPageSelected" @change="toggleSelectAll">
+                  <div class="cb-box"></div>
+                </label>
+              </th>
+              <th class="col-name">文件名</th>
+              <th class="col-album">相册</th>
+              <th class="col-size">大小</th>
+              <th class="col-date">上传时间</th>
+              <th class="col-ops">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="loading-row" v-if="isLoading && paginatedData.length===0">
+              <td colspan="6"><span class="spinner"></span>正在加载数据…</td>
+            </tr>
+            <tr v-if="!isLoading && paginatedData.length===0 && tableData.length===0" class="loading-row">
+              <td colspan="6">
+                <div class="empty-state">
+                  <div class="empty-icon"><i class="fas fa-photo-film"></i></div>
+                  <h3>暂无文件</h3>
+                  <p>点击右上角上传按钮添加文件<br>或使用链接工具导入外部图床链接</p>
+                </div>
+              </td>
+            </tr>
+            <tr v-else-if="paginatedData.length===0" class="loading-row">
+              <td colspan="6">
+                <div class="empty-state">
+                  <div class="empty-icon"><i class="fas fa-filter"></i></div>
+                  <h3>无匹配结果</h3>
+                  <p>当前筛选条件下没有文件</p>
+                </div>
+              </td>
+            </tr>
+
+            <tr class="file-row" v-for="(item, idx) in paginatedData" :key="item.name"
+                :class="{ 'selected-row': item.selected }">
+              <!-- checkbox -->
+              <td>
+                <label class="cb-wrap">
+                  <input type="checkbox" :checked="item.selected" @change="toggleOne(item)">
+                  <div class="cb-box"></div>
+                </label>
+              </td>
+              <!-- name -->
+              <td>
+                <div class="file-icon-name">
+                  <div class="file-type-icon" :class="getTypeClass(item)">
+                    <i :class="getFileIcon(item.metadata.fileName||item.name)"></i>
+                  </div>
+                  <div class="file-name-wrap">
+                    <div class="file-name" :title="item.metadata.fileName||item.name">
+                      {{ item.metadata.fileName || item.name }}
+                      <i class="fas fa-bookmark" style="color:var(--accent);font-size:10px;margin-left:4px" v-if="item.metadata.liked"></i>
+                    </div>
+                    <div class="file-id">{{ item.name }}</div>
+                  </div>
+                </div>
+              </td>
+              <!-- album -->
+              <td>
+                <span class="album-tag" :class="{ none: !getAlbum(item) || getAlbum(item)==='未分类' }"
+                      :title="getAlbum(item)">
+                  {{ getAlbumShort(item) }}
+                </span>
+              </td>
+              <!-- size -->
+              <td><span class="file-size">{{ formatSize(item.metadata.fileSize) }}</span></td>
+              <!-- date -->
+              <td><span class="file-date">{{ formatDate(item.metadata.TimeStamp) }}</span></td>
+              <!-- ops -->
+              <td>
+                <div class="file-ops">
+                  <button class="fop" title="复制链接" @click="copySingleLink(item)"><i class="fas fa-link"></i></button>
+                  <button class="fop" title="复制Markdown" @click="copyMarkdown(item)"><i class="fas fa-markdown"></i></button>
+                  <button class="fop" title="重命名" @click="promptRenameFile(item)"><i class="fas fa-pen"></i></button>
+                  <button class="fop" title="移动相册" @click="openMoveDialogSingle(item)"><i class="fas fa-folder-open"></i></button>
+                  <button class="fop danger" title="删除" @click="handleDelete(item)"><i class="fas fa-trash-alt"></i></button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="pagination-bar">
+        <span>第 {{ currentPage }} / {{ totalPages }} 页，共 {{ filteredTableData.length }} 项</span>
+        <div class="pg-btns">
+          <button class="pg-btn" :disabled="currentPage===1" @click="currentPage=1"><i class="fas fa-step-backward" style="font-size:10px"></i></button>
+          <button class="pg-btn" :disabled="currentPage===1" @click="currentPage--"><i class="fas fa-chevron-left" style="font-size:10px"></i></button>
+          <template v-for="p in pageRange">
+            <button class="pg-btn current" v-if="p===currentPage">{{ p }}</button>
+            <button class="pg-btn" v-else-if="p!=='...'" @click="currentPage=p">{{ p }}</button>
+            <span style="color:var(--text3);padding:0 2px;line-height:30px" v-else>…</span>
+          </template>
+          <button class="pg-btn" :disabled="currentPage===totalPages" @click="currentPage++"><i class="fas fa-chevron-right" style="font-size:10px"></i></button>
+          <button class="pg-btn" :disabled="currentPage===totalPages" @click="currentPage=totalPages"><i class="fas fa-step-forward" style="font-size:10px"></i></button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ══ LINK DIALOG ══ -->
+  <div class="modal-mask" v-if="linkDialogVisible" @click.self="linkDialogVisible=false">
+    <div class="modal-box wide">
+      <div class="modal-header">
+        <span class="modal-title">链接工具</span>
+        <button class="modal-close" @click="linkDialogVisible=false">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-tabs">
+          <button class="mtab" :class="{ active: linkTab==='import' }" @click="linkTab='import'">导入外部链接</button>
+          <button class="mtab" :class="{ active: linkTab==='export' }" @click="linkTab='export'; generateExportUrls()">导出图床链接</button>
+        </div>
+
+        <div v-if="linkTab==='import'">
+          <div class="form-group">
+            <label class="form-label">粘贴链接或 Markdown 图片代码</label>
+            <textarea class="form-textarea" v-model="importUrls" rows="8"
+              placeholder="支持混合输入：
+https://example.com/pic1.jpg
+![说明文字](https://example.com/pic2.png)
+
+程序会自动提取纯链接并转存到当前相册。"></textarea>
+            <p class="form-hint">转存目标相册：<code>{{ selectedAlbum==='All'||selectedAlbum==='None' ? '未分类' : selectedAlbum }}</code></p>
+          </div>
+        </div>
+
+        <div v-if="linkTab==='export'">
+          <div class="form-group">
+            <label class="form-label">
+              {{ selectedFiles.length > 0 ? '已选中 ' + selectedFiles.length : '当前筛选列表 ' + filteredTableData.length }} 个文件的链接
+            </label>
+            <div class="modal-tabs" style="margin-bottom:10px">
+              <button class="mtab" :class="{active:exportFmt==='markdown'}" @click="exportFmt='markdown';generateExportUrls()">Markdown</button>
+              <button class="mtab" :class="{active:exportFmt==='url'}"      @click="exportFmt='url';generateExportUrls()">纯 URL</button>
+              <button class="mtab" :class="{active:exportFmt==='html'}"     @click="exportFmt='html';generateExportUrls()">HTML img</button>
+            </div>
+            <textarea class="form-textarea" v-model="exportUrls" readonly rows="8" style="font-family:monospace;font-size:12px"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="tbtn" @click="linkDialogVisible=false">取消</button>
+        <button class="tbtn primary" v-if="linkTab==='import'" @click="handleImportUrls" :disabled="isImporting">
+          <span class="spinner" v-if="isImporting"></span>
+          {{ isImporting ? '转存中…' : '智能提取并转存' }}
+        </button>
+        <button class="tbtn primary" v-else @click="copyExportUrls">
+          <i class="fas fa-copy"></i> 一键复制全部
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MOVE ALBUM DIALOG ══ -->
+  <div class="modal-mask" v-if="moveDialogVisible" @click.self="moveDialogVisible=false">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span class="modal-title">移动到相册</span>
+        <button class="modal-close" @click="moveDialogVisible=false">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:14px">
+          将 <strong>{{ moveTargetFiles.length }}</strong> 个文件移动到：
+        </p>
+        <div class="move-tree">
+          <div class="move-tree-inner">
+            <div class="move-row" :class="{selected:moveTarget==='None'}" @click="moveTarget='None'">
+              <i class="fas fa-inbox" style="color:var(--text3);font-size:13px"></i> 未分类
+            </div>
+            <div class="move-row" v-for="alb in flatAlbums" :key="alb"
+                 :class="{selected:moveTarget===alb}" @click="moveTarget=alb">
+              <i class="fas fa-folder" style="color:var(--accent-dim);font-size:13px;margin-left:4px"></i>
+              {{ alb }}
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:12px">
+          <label class="form-label">或新建并移动到</label>
+          <input class="form-input" v-model="moveNewAlbum" placeholder="输入新相册名称（支持多级 a/b/c）">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="tbtn" @click="moveDialogVisible=false">取消</button>
+        <button class="tbtn primary" @click="confirmMove">确认移动</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ BATCH COPY DIALOG ══ -->
+  <div class="modal-mask" v-if="batchCopyVisible" @click.self="batchCopyVisible=false">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span class="modal-title">批量复制链接</span>
+        <button class="modal-close" @click="batchCopyVisible=false">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-tabs" style="margin-bottom:12px">
+          <button class="mtab" :class="{active:batchCopyFmt==='markdown'}" @click="batchCopyFmt='markdown'">Markdown</button>
+          <button class="mtab" :class="{active:batchCopyFmt==='url'}"      @click="batchCopyFmt='url'">纯 URL</button>
+          <button class="mtab" :class="{active:batchCopyFmt==='html'}"     @click="batchCopyFmt='html'">HTML img</button>
+        </div>
+        <div class="link-list">
+          <div class="link-row" v-for="item in selectedFiles" :key="item.name" @click="copyText(formatLink(item, batchCopyFmt))">
+            {{ formatLink(item, batchCopyFmt) }}
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="tbtn" @click="batchCopyVisible=false">取消</button>
+        <button class="tbtn primary" @click="copyAllLinks">
+          <i class="fas fa-copy"></i> 全部复制
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div class="toast-container">
+    <div class="toast" :class="t.type" v-for="t in toasts" :key="t.id">
+      <div class="toast-dot"></div>
+      <div class="toast-msg">{{ t.msg }}</div>
+      <div class="toast-close" @click="removeToast(t.id)">✕</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ AlbumNode component ══ -->
+<script>
+Vue && 0; // defer
+</script>
+<script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/element-ui@2.15.3/lib/index.js"></script>
+<script>
+// ── Recursive album tree node component ─────────────────────────────────────
+Vue.component('album-node', {
+  props: ['node','nodeKey','selectedAlbum','depth','newAlbumParent','newAlbumNameProp'],
+  data() { return { open: false }; },
+  template: `
+    <div class="tree-node">
+      <div class="tree-row" :class="{ active: selectedAlbum === node.fullKey }"
+           @click="$emit('select', node.fullKey)">
+        <div :style="{ width: depth*16 + 'px' }" class="tree-indent"></div>
+        <button class="tree-toggle" :class="{ open: open, leaf: !hasChildren }"
+                @click.stop="open=!open"><i class="fas fa-chevron-right"></i></button>
+        <i class="tree-icon" :class="open && hasChildren ? 'fas fa-folder-open' : 'fas fa-folder'"></i>
+        <span class="tree-name" :title="nodeKey">{{ nodeKey }}</span>
+        <span class="tree-count" v-if="node.count">{{ node.count }}</span>
+        <div class="tree-ops">
+          <button class="tree-op" title="新建子相册" @click.stop="$emit('add-child', node.fullKey)"><i class="fas fa-plus"></i></button>
+          <button class="tree-op" title="重命名" @click.stop="$emit('rename', node.fullKey)"><i class="fas fa-pen"></i></button>
+          <button class="tree-op danger" title="删除相册" @click.stop="$emit('delete', node.fullKey)"><i class="fas fa-trash"></i></button>
+        </div>
+      </div>
+
+      <!-- New child album input -->
+      <div class="tree-new-input" v-if="newAlbumParent === node.fullKey" @click.stop>
+        <div :style="{ width: (depth+1)*16 + 'px' }"></div>
+        <input :value="newAlbumNameProp" @input="$emit('new-name-change',$event.target.value)"
+               @keyup.enter="$emit('confirm-new')" @keyup.esc="$emit('cancel-new')"
+               placeholder="子相册名…" ref="childInput">
+        <button class="tree-new-confirm" @click.stop="$emit('confirm-new')"><i class="fas fa-check"></i></button>
+        <button class="tree-new-cancel" @click.stop="$emit('cancel-new')"><i class="fas fa-times"></i></button>
+      </div>
+
+      <div class="tree-children" v-if="open && hasChildren">
+        <album-node v-for="(child, key) in node.children" :key="key"
+                    :node="child" :node-key="key"
+                    :selected-album="selectedAlbum"
+                    :new-album-parent="newAlbumParent"
+                    :new-album-name-prop="newAlbumNameProp"
+                    :depth="depth+1"
+                    @select="$emit('select',$event)"
+                    @rename="$emit('rename',$event)"
+                    @delete="$emit('delete',$event)"
+                    @add-child="$emit('add-child',$event)"
+                    @confirm-new="$emit('confirm-new')"
+                    @cancel-new="$emit('cancel-new')"
+                    @new-name-change="$emit('new-name-change',$event)">
+        </album-node>
+      </div>
+    </div>
+  `,
+  computed: {
+    hasChildren() { return Object.keys(this.node.children || {}).length > 0; }
+  }
+});
+
+// ── Main App ─────────────────────────────────────────────────────────────────
+new Vue({
+  el: '#app',
+  data: {
+    baseURL: document.location.origin,
+    tableData: [],
+    nextCursor: null,
+    isLoading: false,
+    search: '',
+    fileType: 'all',
+    selectedAlbum: 'All',
+    sortOption: 'dateDesc',
+    filterOption: 'all',
+    currentPage: 1,
+    pageSize: 25,
+    darkMode: false,
+    sidebarCollapsed: false,
+
+    // Album tree editing
+    newAlbumParent: null,
+    newAlbumName: '',
+
+    // Dialogs
+    linkDialogVisible: false,
+    linkTab: 'import',
+    importUrls: '',
+    exportUrls: '',
+    exportFmt: 'markdown',
+    isImporting: false,
+
+    moveDialogVisible: false,
+    moveTargetFiles: [],
+    moveTarget: '',
+    moveNewAlbum: '',
+
+    batchCopyVisible: false,
+    batchCopyFmt: 'markdown',
+
+    // Toasts
+    toasts: [],
+    toastId: 0,
+
+    fileExts: {
+      image: ['jpg','jpeg','png','gif','webp','bmp','tiff','ico','svg'],
+      video: ['mp4','webm','ogg','avi','mov','wmv','flv','mkv'],
+      audio: ['mp3','wav','ogg','flac','aac','m4a','wma'],
+    }
+  },
+
+  computed: {
+    // ── Album tree ──────────────────────────────────────────────────────────
+    albumKeys() {
+      const s = new Set();
+      this.tableData.forEach(i => {
+        const t = i.metadata?.ListType;
+        if (t && t !== 'None' && t !== 'Block' && t !== 'White') s.add(t);
+      });
+      return Array.from(s);
+    },
+    flatAlbums() { return [...this.albumKeys].sort(); },
+
+    albumCounts() {
+      const c = {};
+      this.tableData.forEach(i => {
+        const k = i.metadata?.ListType;
+        if (k && k!=='None'&&k!=='Block'&&k!=='White') c[k] = (c[k]||0)+1;
+      });
+      return c;
+    },
+
+    albumTree() {
+      const tree = {};
+      this.albumKeys.forEach(key => {
+        const parts = key.split('/');
+        let node = tree;
+        parts.forEach((part, i) => {
+          if (!node[part]) node[part] = { fullKey: parts.slice(0,i+1).join('/'), children: {}, count: 0 };
+          if (i === parts.length - 1) {
+            node[part].count = this.albumCounts[key] || 0;
+          }
+          node = node[part].children;
+        });
+      });
+      return tree;
+    },
+
+    uncategorizedCount() {
+      return this.tableData.filter(i => {
+        const t = i.metadata?.ListType;
+        return !t || t==='None' || t==='Block' || t==='White';
+      }).length;
+    },
+
+    albumBreadcrumb() {
+      if (!this.selectedAlbum || this.selectedAlbum==='All' || this.selectedAlbum==='None') return ['未分类'];
+      return this.selectedAlbum.split('/');
+    },
+
+    // ── Filtering ───────────────────────────────────────────────────────────
+    filteredTableData() {
+      const q = this.search.toLowerCase();
+      return this.tableData.filter(item => {
+        // Search
+        if (q) {
+          const name = (item.metadata?.fileName||item.name||'').toLowerCase();
+          if (!name.includes(q) && !item.name.toLowerCase().includes(q)) return false;
+        }
+        // Album
+        const itemAlbum = item.metadata?.ListType || 'None';
+        if (this.selectedAlbum !== 'All') {
+          if (this.selectedAlbum === 'None') {
+            if (itemAlbum !== 'None' && itemAlbum !== 'Block' && itemAlbum !== 'White') return false;
+          } else {
+            if (itemAlbum !== this.selectedAlbum && !itemAlbum.startsWith(this.selectedAlbum+'/')) return false;
+          }
+        }
+        // File type
+        if (this.fileType !== 'all') {
+          const fname = item.metadata?.fileName || item.name;
+          const ext = fname.split('.').pop().toLowerCase();
+          if (this.fileType === 'document') {
+            const allExts = [...this.fileExts.image, ...this.fileExts.video, ...this.fileExts.audio];
+            if (allExts.includes(ext)) return false;
+          } else {
+            if (!this.fileExts[this.fileType]?.includes(ext)) return false;
+          }
+        }
+        // Filter
+        if (this.filterOption === 'favorites' && !item.metadata?.liked) return false;
+        if (this.filterOption === 'blocked' && itemAlbum !== 'Block') return false;
+        return true;
+      }).sort((a, b) => {
+        if (this.sortOption === 'nameAsc') return (a.metadata?.fileName||a.name).localeCompare(b.metadata?.fileName||b.name);
+        if (this.sortOption === 'sizeDesc') return (b.metadata?.fileSize||0) - (a.metadata?.fileSize||0);
+        return (b.metadata?.TimeStamp||0) - (a.metadata?.TimeStamp||0);
+      });
+    },
+
+    paginatedData() {
+      const s = (this.currentPage-1) * this.pageSize;
+      return this.filteredTableData.slice(s, s + this.pageSize);
+    },
+
+    totalPages() { return Math.max(1, Math.ceil(this.filteredTableData.length / this.pageSize)); },
+
+    pageRange() {
+      const t = this.totalPages, c = this.currentPage, d = 2;
+      const pages = [];
+      for (let i = 1; i <= t; i++) {
+        if (i===1 || i===t || (i>=c-d && i<=c+d)) pages.push(i);
+        else if (pages[pages.length-1] !== '...') pages.push('...');
+      }
+      return pages;
+    },
+
+    selectedFiles() { return this.tableData.filter(f => f.selected); },
+    allPageSelected() {
+      return this.paginatedData.length > 0 && this.paginatedData.every(f => f.selected);
+    },
+  },
+
+  watch: {
+    filteredTableData() { if (this.currentPage > this.totalPages) this.currentPage = 1; },
+    search() { this.currentPage = 1; },
+    selectedAlbum() { this.currentPage = 1; },
+    fileType() { this.currentPage = 1; },
+  },
+
+  methods: {
+    // ── Theme ───────────────────────────────────────────────────────────────
+    toggleTheme() {
+      this.darkMode = !this.darkMode;
+      document.documentElement.setAttribute('data-theme', this.darkMode ? 'dark' : 'light');
+      localStorage.setItem('theme', this.darkMode ? 'dark' : 'light');
+    },
+
+    // ── Toast ───────────────────────────────────────────────────────────────
+    toast(msg, type='info', duration=2800) {
+      const id = ++this.toastId;
+      this.toasts.push({ id, msg, type });
+      setTimeout(() => this.removeToast(id), duration);
+    },
+    removeToast(id) { this.toasts = this.toasts.filter(t => t.id!==id); },
+
+    // ── Selection ───────────────────────────────────────────────────────────
+    toggleOne(item) {
+      const i = this.tableData.findIndex(f => f.name===item.name);
+      if (i>-1) this.$set(this.tableData[i], 'selected', !this.tableData[i].selected);
+    },
+    toggleSelectAll() {
+      const val = !this.allPageSelected;
+      this.paginatedData.forEach(item => {
+        const i = this.tableData.findIndex(f => f.name===item.name);
+        if (i>-1) this.$set(this.tableData[i], 'selected', val);
+      });
+    },
+    clearSelection() { this.tableData.forEach(f => { f.selected = false; }); },
+
+    // ── Album nav ───────────────────────────────────────────────────────────
+    setAlbum(key) { this.selectedAlbum = key; this.currentPage = 1; },
+
+    // ── Album CRUD ──────────────────────────────────────────────────────────
+    startNewAlbum(parentKey) {
+      this.newAlbumParent = parentKey === null ? '__root__' : parentKey;
+      this.newAlbumName = '';
+      this.$nextTick(() => {
+        const el = this.$el.querySelector('.tree-new-input input');
+        if (el) el.focus();
+      });
+    },
+    cancelNewAlbum() { this.newAlbumParent = null; this.newAlbumName = ''; },
+    confirmNewAlbum() {
+      const name = this.newAlbumName.trim();
+      if (!name) { this.toast('相册名称不能为空', 'error'); return; }
+      const fullKey = this.newAlbumParent === '__root__' ? name : this.newAlbumParent + '/' + name;
+      if (this.albumKeys.includes(fullKey)) { this.toast('该相册已存在', 'error'); return; }
+      // No API to create empty album — just select it and navigate
+      this.cancelNewAlbum();
+      this.setAlbum(fullKey);
+      this.toast(`已创建相册 "${fullKey}"，上传文件即可添加内容`, 'success');
+    },
+
+    promptRenameAlbum(fullKey) {
+      if (this.nextCursor) {
+        this.toast('请先加载全部数据再执行重命名，避免遗漏', 'error'); return;
+      }
+      this.$prompt(`重命名相册 "${fullKey}" 为：`, '重命名相册', {
+        confirmButtonText: '确定', cancelButtonText: '取消',
+        inputValue: fullKey,
+        inputValidator: v => {
+          if (!v?.trim()) return '不能为空';
+          if (v.trim() === fullKey) return '名称未变';
+          return true;
+        }
+      }).then(({ value }) => {
+        const newName = value.trim();
+        const files = this.tableData.filter(i => {
+          const t = i.metadata?.ListType || '';
+          return t === fullKey || t.startsWith(fullKey+'/');
+        });
+        if (!files.length) { this.toast('相册为空，无需重命名', 'info'); return; }
+        const loading = this.toast(`正在重命名 ${files.length} 个文件…`, 'info', 60000);
+        const ps = files.map(f => {
+          const oldAlbum = f.metadata.ListType;
+          const newAlbum = newName + oldAlbum.slice(fullKey.length);
+          return fetch(`./api/manage/moveAlbum/${f.name}?newAlbum=${encodeURIComponent(newAlbum)}`,
+            { method:'GET', credentials:'include' })
+            .then(r => r.ok && this.$set(f.metadata, 'ListType', newAlbum));
+        });
+        Promise.all(ps).then(() => {
+          this.toast(`重命名完成`, 'success');
+          if (this.selectedAlbum === fullKey) this.setAlbum(newName);
+        });
+      }).catch(()=>{});
+    },
+
+    promptDeleteAlbum(fullKey) {
+      const files = this.tableData.filter(i => {
+        const t = i.metadata?.ListType||'';
+        return t===fullKey || t.startsWith(fullKey+'/');
+      });
+      this.$confirm(
+        files.length ? `相册 "${fullKey}" 含 ${files.length} 个文件，删除相册只会将文件移至【未分类】，不会删除文件本身。是否继续？` : `删除空相册 "${fullKey}"？`,
+        '删除相册', { confirmButtonText:'确定', cancelButtonText:'取消', type:'warning' }
+      ).then(() => {
+        if (!files.length) { this.toast('相册已清空', 'success'); return; }
+        const ps = files.map(f =>
+          fetch(`./api/manage/moveAlbum/${f.name}?newAlbum=None`, { method:'GET', credentials:'include' })
+            .then(r => r.ok && this.$set(f.metadata, 'ListType', 'None'))
+        );
+        Promise.all(ps).then(() => {
+          this.toast(`已将 ${files.length} 个文件移至未分类`, 'success');
+          if (this.selectedAlbum===fullKey) this.setAlbum('All');
+        });
+      }).catch(()=>{});
+    },
+
+    // ── File ops ─────────────────────────────────────────────────────────────
+    copySingleLink(item) {
+      this.copyText(`${this.baseURL}/file/${item.name}`);
+      this.toast('链接已复制', 'success');
+    },
+    copyMarkdown(item) {
+      const name = item.metadata?.fileName || item.name;
+      this.copyText(`![${name}](${this.baseURL}/file/${item.name})`);
+      this.toast('Markdown 链接已复制', 'success');
+    },
+    copyText(text) {
+      (navigator.clipboard?.writeText(text) || new Promise((res,rej) => {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.cssText = 'position:fixed;top:0;clip:rect(0 0 0 0)';
+        document.body.appendChild(ta); ta.select();
+        document.execCommand('copy') ? res() : rej();
+        document.body.removeChild(ta);
+      })).catch(() => this.toast('复制失败，请手动复制', 'error'));
+    },
+
+    promptRenameFile(item) {
+      this.$prompt('', '修改显示名称', {
+        inputValue: item.metadata?.fileName || item.name,
+        confirmButtonText:'确定', cancelButtonText:'取消',
+        inputValidator: v => v?.trim() ? true : '不能为空'
+      }).then(({ value }) => {
+        fetch(`./api/manage/editName/${item.name}?newName=${encodeURIComponent(value.trim())}`,
+          { method:'GET', credentials:'include' })
+          .then(r => r.json())
+          .then(d => {
+            if (d.success) { this.$set(item.metadata, 'fileName', value.trim()); this.toast('重命名成功', 'success'); }
+            else this.toast('重命名失败', 'error');
+          });
+      }).catch(()=>{});
+    },
+
+    handleDelete(item) {
+      this.$confirm(`确认删除 "${item.metadata?.fileName||item.name}"？`, '删除文件',
+        { confirmButtonText:'删除', cancelButtonText:'取消', type:'warning' })
+        .then(() => {
+          fetch(`./api/manage/delete/${item.name}`, { method:'GET', credentials:'include' })
+            .then(() => {
+              const i = this.tableData.findIndex(f=>f.name===item.name);
+              if (i>-1) this.tableData.splice(i,1);
+              this.toast('已删除', 'success');
+            });
+        }).catch(()=>{});
+    },
+
+    handleBatchDelete() {
+      const files = this.selectedFiles;
+      this.$confirm(`确认永久删除这 ${files.length} 个文件？`, '批量删除',
+        { confirmButtonText:'删除', cancelButtonText:'取消', type:'warning' })
+        .then(() => {
+          Promise.all(files.map(f => fetch(`./api/manage/delete/${f.name}`,{method:'GET',credentials:'include'})))
+            .then(() => {
+              const names = new Set(files.map(f=>f.name));
+              this.tableData = this.tableData.filter(f=>!names.has(f.name));
+              this.toast(`已删除 ${files.length} 个文件`, 'success');
+            });
+        }).catch(()=>{});
+    },
+
+    handleBatchDownload() {
+      this.selectedFiles.forEach((f,i) => setTimeout(()=>{
+        const a = document.createElement('a');
+        a.href = `/file/${f.name}`;
+        a.download = f.metadata?.fileName||f.name;
+        a.click();
+      }, i*600));
+      this.toast(`开始下载 ${this.selectedFiles.length} 个文件`, 'info');
+    },
+
+    // ── Move album ───────────────────────────────────────────────────────────
+    openMoveDialog() {
+      this.moveTargetFiles = [...this.selectedFiles];
+      this.moveTarget = '';
+      this.moveNewAlbum = '';
+      this.moveDialogVisible = true;
+    },
+    openMoveDialogSingle(item) {
+      this.moveTargetFiles = [item];
+      this.moveTarget = '';
+      this.moveNewAlbum = '';
+      this.moveDialogVisible = true;
+    },
+    confirmMove() {
+      const target = (this.moveNewAlbum.trim() || this.moveTarget || 'None');
+      if (!target) { this.toast('请选择目标相册', 'error'); return; }
+      const files = this.moveTargetFiles;
+      Promise.all(files.map(f =>
+        fetch(`./api/manage/moveAlbum/${f.name}?newAlbum=${encodeURIComponent(target)}`,
+          { method:'GET', credentials:'include' })
+          .then(r => r.ok && this.$set(f.metadata, 'ListType', target))
+      )).then(() => {
+        this.toast(`已移动 ${files.length} 个文件到 "${target}"`, 'success');
+        this.moveDialogVisible = false;
+        this.clearSelection();
+      });
+    },
+
+    // ── Copy dialogs ─────────────────────────────────────────────────────────
+    openBatchCopyDialog() { this.batchCopyVisible = true; },
+    formatLink(item, fmt) {
+      const url = `${this.baseURL}/file/${item.name}`;
+      const name = item.metadata?.fileName||item.name;
+      if (fmt==='url') return url;
+      if (fmt==='html') return `<img src="${url}" alt="${name}">`;
+      return `![${name}](${url})`;
+    },
+    copyAllLinks() {
+      const text = this.selectedFiles.map(f=>this.formatLink(f,this.batchCopyFmt)).join('\n');
+      this.copyText(text);
+      this.toast(`已复制 ${this.selectedFiles.length} 条链接`, 'success');
+      this.batchCopyVisible = false;
+    },
+
+    // ── Link tool ────────────────────────────────────────────────────────────
+    openLinkDialog() { this.linkDialogVisible = true; this.linkTab = 'import'; },
+    generateExportUrls() {
+      const list = this.selectedFiles.length ? this.selectedFiles : this.filteredTableData;
+      this.exportUrls = list.map(i => this.formatLink(i, this.exportFmt)).join('\n');
+    },
+    copyExportUrls() {
+      this.copyText(this.exportUrls);
+      this.toast('已复制到剪贴板', 'success');
+    },
+    async handleImportUrls() {
+      let text = this.importUrls.replace(/!\[.*?\]\((https?:\/\/[^)]+)\)/g, '$1');
+      const urls = [...new Set(text.split(/\s+/).filter(u=>/^https?:\/\//i.test(u)))];
+      if (!urls.length) { this.toast('未检测到有效链接', 'error'); return; }
+      this.isImporting = true;
+      const albumParam = (this.selectedAlbum==='All'||this.selectedAlbum==='None') ? '' : `?album=${encodeURIComponent(this.selectedAlbum)}`;
+      const endpoint = `${this.baseURL}/upload${albumParam}`;
+      let ok=0, fail=0;
+      for (const url of urls) {
+        try {
+          let blob;
+          try { const r=await fetch(url); if(!r.ok) throw 0; blob=await r.blob(); }
+          catch { const r=await fetch('https://api.allorigins.win/raw?url='+encodeURIComponent(url)); blob=await r.blob(); }
+          let fn = url.split('/').pop().split('?')[0]||`import_${Date.now()}`;
+          if (!fn.includes('.')) { const m={'image/jpeg':'jpg','image/png':'png','image/gif':'gif','image/webp':'webp','video/mp4':'mp4'}; fn+='.'+( m[blob.type]||'bin'); }
+          const fd = new FormData();
+          fd.append('file', new File([blob],fn,{type:blob.type}));
+          const r = await fetch(endpoint,{method:'POST',body:fd,credentials:'include'});
+          const d = await r.json();
+          if (r.ok && !d[0]?.error) ok++; else fail++;
+        } catch { fail++; }
+      }
+      this.isImporting = false;
+      if (ok) { this.toast(`成功转存 ${ok} 个文件`, 'success'); this.importUrls=''; this.linkDialogVisible=false; this.refreshAll(); }
+      else this.toast(`全部 ${fail} 个链接转存失败`, 'error');
+    },
+
+    // ── Upload ───────────────────────────────────────────────────────────────
+    async uploadFiles(e) {
+      const files = Array.from(e.target.files||[]).filter(f=>f.size<=20*1024*1024);
+      if (!files.length) { this.toast('无有效文件或文件超过20MB', 'error'); e.target.value=''; return; }
+      const albumParam = (this.selectedAlbum==='All'||this.selectedAlbum==='None') ? '' : `?album=${encodeURIComponent(this.selectedAlbum)}`;
+      const endpoint = `${this.baseURL}/upload${albumParam}`;
+      this.toast(`开始上传 ${files.length} 个文件…`, 'info');
+      let ok=0;
+      const upload = async f => {
+        const fd=new FormData(); fd.append('file',f);
+        const r=await fetch(endpoint,{method:'POST',body:fd,credentials:'include'});
+        const d=await r.json();
+        if (r.ok&&!d[0]?.error) ok++;
+      };
+      for (let i=0;i<files.length;i+=3) await Promise.all(files.slice(i,i+3).map(upload));
+      this.toast(`上传完成，成功 ${ok} / ${files.length}`, ok===files.length?'success':'info');
+      if (ok) this.refreshAll();
+      e.target.value='';
+    },
+
+    // ── Data loading ──────────────────────────────────────────────────────────
+    async loadMore(isInitial=false) {
+      if (this.isLoading) return;
+      if (!isInitial && !this.nextCursor) return;
+      this.isLoading = true;
+      let url = './api/manage/list?limit=300';
+      if (!isInitial && this.nextCursor) url += '&cursor='+encodeURIComponent(this.nextCursor);
+      try {
+        const r = await fetch(url,{method:'GET',credentials:'include'});
+        if (r.status===401) { location.href='./api/manage/login'; return; }
+        const d = await r.json();
+        const items = (d.keys||[]).map(f=>({
+          ...f, selected: false,
+          metadata: { liked:false, fileName:f.name, fileSize:0, ...f.metadata }
+        }));
+        if (isInitial) this.tableData = items;
+        else this.tableData.push(...items);
+        this.nextCursor = d.list_complete ? null : d.cursor;
+      } catch { this.toast('加载失败，请检查网络', 'error'); }
+      finally { this.isLoading = false; }
+    },
+
+    refreshAll() { this.tableData=[]; this.nextCursor=null; this.loadMore(true); },
+    handleLogout() { location.href='./api/manage/logout'; },
+
+    // ── Formatters ────────────────────────────────────────────────────────────
+    getTypeClass(item) {
+      const fname = item.metadata?.fileName||item.name;
+      const ext = fname.split('.').pop().toLowerCase();
+      if (this.fileExts.image.includes(ext)) return 'img';
+      if (this.fileExts.video.includes(ext)) return 'vid';
+      if (this.fileExts.audio.includes(ext)) return 'aud';
+      return 'doc';
+    },
+    getFileIcon(name) {
+      const ext = name.split('.').pop().toLowerCase();
+      const m = {
+        'pdf':'fas fa-file-pdf', 'doc,docx':'fas fa-file-word', 'xls,xlsx,csv':'fas fa-file-excel',
+        'ppt,pptx':'fas fa-file-powerpoint', 'txt,md,log':'fas fa-file-lines',
+        'zip,rar,7z,tar,gz':'fas fa-file-zipper', 'mp4,webm,avi,mov,mkv':'fas fa-file-video',
+        'mp3,wav,flac,aac,m4a':'fas fa-file-audio',
+        'jpg,jpeg,png,gif,webp,bmp,ico,svg':'fas fa-file-image',
+        'html,css,js,ts,py,go,rs,php,java':'fas fa-file-code',
+        'json,xml,yaml,yml':'fas fa-file-code',
+      };
+      for (const [k,v] of Object.entries(m)) { if(k.split(',').includes(ext)) return v; }
+      return 'fas fa-file';
+    },
+    getAlbum(item) {
+      const t = item.metadata?.ListType;
+      if (!t||t==='None'||t==='Block'||t==='White') return '未分类';
+      return t;
+    },
+    getAlbumShort(item) {
+      const a = this.getAlbum(item);
+      if (a==='未分类') return a;
+      return a.split('/').pop();
+    },
+    formatSize(bytes) {
+      if (!bytes) return '—';
+      if (bytes<1024) return bytes+'B';
+      if (bytes<1024*1024) return (bytes/1024).toFixed(1)+'KB';
+      return (bytes/(1024*1024)).toFixed(1)+'MB';
+    },
+    formatDate(ts) {
+      if (!ts) return '—';
+      const d = new Date(ts);
+      return d.toLocaleDateString('zh-CN',{year:'2-digit',month:'2-digit',day:'2-digit'}) + ' ' +
+             d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
+    }
+  },
+
+  mounted() {
+    // Restore theme
+    const saved = localStorage.getItem('theme');
+    if (saved==='dark') { this.darkMode=true; document.documentElement.setAttribute('data-theme','dark'); }
+
+    // Auth check
+    fetch('./api/manage/check',{method:'GET',credentials:'include'})
+      .then(r=>r.text())
+      .then(t => { if(t!=='true'&&t!=='Not using basic auth.') location.href='./api/manage/login'; })
+      .catch(()=>this.toast('连接异常，请检查网络','error'));
+
+    this.loadMore(true);
+  }
+});
+</script>
+</body>
+</html>
+
