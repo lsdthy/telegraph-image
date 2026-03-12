@@ -209,7 +209,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans','PingFang SC',
   break-inside:avoid;overflow:hidden;cursor:pointer;
   position:relative;display:block;width:100%;
   filter:var(--img-rest);transition:filter .35s ease;
-  animation:tilein .5s ease both;contain:paint style;
+  animation:tilein .5s ease both;contain:layout style;
 }
 @keyframes tilein{from{opacity:0;filter:brightness(.3) saturate(0)}to{opacity:1;filter:var(--img-rest)}}
 .tile:hover{filter:var(--img-hover);z-index:2}
@@ -449,7 +449,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans','PingFang SC',
           <video v-if="isVid(item.name)" controls preload="none" style="width:100%;display:block">
             <source :src="'/file/'+item.name" type="video/mp4">
           </video>
-          <el-image v-else :src="'/file/'+item.name" :preview-src-list="['/file/'+item.name]" lazy></el-image>
+          <el-image v-else :src="'/file/'+item.name" :preview-src-list="['/file/'+item.name]"></el-image>
           <div class="tov">
             <div class="tova">{{aLabel(item)}}</div>
             <div class="tovn">{{fName(item)}}</div>
